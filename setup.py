@@ -41,7 +41,7 @@ def get_long_description():
 setup(
 
   name                          = 'pymtl3',
-  version                       = '0.5.5-based',#get_version(),
+  version                       = '0.5.5.1',#get_version(),
   description                   = \
       'PyMTL 3 (Mamba): A Python-based hardware generation, simulation, and verification framework',
   long_description              = get_long_description(),
