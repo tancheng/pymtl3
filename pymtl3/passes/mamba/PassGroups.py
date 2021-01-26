@@ -1,54 +1,53 @@
 from ..BasePass import BasePass
+from ..sim.AddSimUtilFuncsPass import AddSimUtilFuncsPass
 from ..sim.GenDAGPass import GenDAGPass
-from ..sim.PrepareSimPass import PrepareSimPass
 from ..sim.SimpleSchedulePass import SimpleSchedulePass
 from ..sim.WrapGreenletPass import WrapGreenletPass
 from ..tracing.CLLineTracePass import CLLineTracePass
 from ..tracing.LineTraceParamPass import LineTraceParamPass
 from .HeuristicTopoPass import HeuristicTopoPass
 from .Mamba2020Pass import Mamba2020Pass
-from .UnrollSimPass import UnrollSimPass
+from .TraceBreakingSchedTickPass import TraceBreakingSchedTickPass
+from .UnrollTickPass import UnrollTickPass
 
 
 class UnrollSim( BasePass ):
-  def __init__( s, *, waveform=None, print_line_trace=True, reset_active_high=True ):
-    s.waveform = waveform
-    s.print_line_trace = print_line_trace
-    s.reset_active_high = reset_active_high
-
   def __call__( s, top ):
     top.elaborate()
     GenDAGPass()( top )
     WrapGreenletPass()( top )
     SimpleSchedulePass()( top )
-    UnrollSimPass(print_line_trace=s.print_line_trace,
-                  reset_active_high=s.reset_active_high)( top )
+    UnrollTickPass()( top )
+    top.lock_in_simulation()
 
 class HeuTopoUnrollSim( BasePass ):
-  def __init__( s, *, waveform=None, print_line_trace=True, reset_active_high=True ):
-    s.waveform = waveform
-    s.print_line_trace = print_line_trace
-    s.reset_active_high = reset_active_high
-
   def __call__( s, top ):
     top.elaborate()
     GenDAGPass()( top )
     WrapGreenletPass()( top )
-    HeuristicTopoPass(print_line_trace=s.print_line_trace,
-                      reset_active_high=s.reset_active_high)( top )
+    HeuristicTopoPass()( top )
+    UnrollTickPass()( top )
+    top.lock_in_simulation()
+
+class TraceBreakingSim( BasePass ):
+  def __call__( s, top ):
+    top.elaborate()
+    GenDAGPass()( top )
+    WrapGreenletPass()( top )
+    TraceBreakingSchedTickPass()( top )
+    top.lock_in_simulation()
 
 class Mamba2020( BasePass ):
-  def __init__( s, *, waveform=None, print_line_trace=True, reset_active_high=True ):
-    s.waveform = waveform
-    s.print_line_trace = print_line_trace
-    s.reset_active_high = reset_active_high
+  def __init__( s, line_trace=False ):
+    s.line_trace = line_trace
 
   def __call__( s, top ):
     top.elaborate()
     GenDAGPass()( top )
     WrapGreenletPass()( top )
-    if s.print_line_trace:
+    if s.line_trace:
       CLLineTracePass()( top )
       LineTraceParamPass()( top )
-    Mamba2020Pass(print_line_trace=s.print_line_trace,
-                  reset_active_high=s.reset_active_high)( top )
+    Mamba2020Pass()( top )
+    AddSimUtilFuncsPass()( top )
+    top.lock_in_simulation()

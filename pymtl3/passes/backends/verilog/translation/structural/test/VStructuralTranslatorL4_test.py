@@ -9,7 +9,6 @@ from collections import deque
 
 import pytest
 
-from pymtl3.passes.backends.verilog import VerilogPlaceholderPass
 from pymtl3.passes.backends.verilog.util.test_utility import check_eq
 from pymtl3.passes.backends.verilog.util.utility import verilog_reserved
 
@@ -26,7 +25,6 @@ def run_test( case, m ):
   m.elaborate()
   VStructuralTranslatorL4.is_verilog_reserved = lambda s, x: x in verilog_reserved
   tr = VStructuralTranslatorL4( m )
-  tr._placeholder_pass = VerilogPlaceholderPass
   tr.clear( m )
   tr._rtlir_tr_unpacked_q = deque()
   tr.translate_structural( m )

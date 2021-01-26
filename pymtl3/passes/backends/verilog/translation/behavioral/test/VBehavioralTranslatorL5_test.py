@@ -22,9 +22,9 @@ def run_test( case, m ):
   m.elaborate()
   visitor = BehavioralRTLIRToVVisitorL5(lambda x: x in verilog_reserved)
 
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
-  upblks = m.get_metadata( BehavioralRTLIRGenPass.rtlir_upblks )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
+  upblks = m._pass_behavioral_rtlir_gen.rtlir_upblks
   m_all_upblks = m.get_update_blocks()
   assert len(m_all_upblks) == 1
 

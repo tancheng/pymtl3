@@ -6,66 +6,107 @@
 """Closed-loop test with SystemVerilog translation and import."""
 
 from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
-    _run_queue_test_replace_run_sim,
-)
-from pymtl3.passes.PassGroups import DefaultPassGroup
-from pymtl3.stdlib.queues.test.enrdy_queues_test import (
     test_bypass_queue as _bypass_queue,
 )
-from pymtl3.stdlib.queues.test.enrdy_queues_test import (
+from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
     test_bypass_queue_stall as _bypass_queue_stall,
 )
-from pymtl3.stdlib.queues.test.enrdy_queues_test import (
+from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
     test_normal_queue as _normal_queue,
 )
-from pymtl3.stdlib.queues.test.enrdy_queues_test import (
+from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
     test_normal_queue_stall as _normal_queue_stall,
 )
-from pymtl3.stdlib.queues.test.enrdy_queues_test import test_pipe_queue as _pipe_queue
-from pymtl3.stdlib.queues.test.enrdy_queues_test import (
+from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
+    test_pipe_queue as _pipe_queue,
+)
+from pymtl3.passes.backends.verilog.test.TranslationImport_closed_loop_directed_test import (
     test_pipe_queue_stall as _pipe_queue_stall,
 )
+from pymtl3.passes.PassGroups import SimulationPass
 
-from ..YosysTranslationImportPass import YosysTranslationImportPass
+from ..TranslationImportPass import TranslationImportPass
 
 #-------------------------------------------------------------------------
 # Valrdy queue tests
 #-------------------------------------------------------------------------
 
-def yosys_run_sim( _th ):
-  _th.elaborate()
-  _th.q.set_metadata( YosysTranslationImportPass.enable, True )
-  th = YosysTranslationImportPass()( _th )
-
+def run_sim( _th ):
   try:
-    th.apply( DefaultPassGroup() )
-    th.sim_reset()
+    _th.elaborate()
+    _th.q.yosys_translate_import = True
+    th = TranslationImportPass()( _th )
+    th.apply( SimulationPass() )
 
-    while not th.done() and th.sim_cycle_count() < 1000:
-      th.sim_tick()
+    print()
+    cycle = 0
+    while not th.done() and cycle < 1000:
+      th.tick()
+      print(th.line_trace())
+      cycle += 1
 
-    assert th.sim_cycle_count() < 1000
+    assert cycle < 1000
 
-    th.sim_tick()
-    th.sim_tick()
-    th.sim_tick()
+    th.tick()
+    th.tick()
+    th.tick()
   finally:
-    th.q.finalize()
+    try:
+      th.q.finalize()
+    except UnboundLocalError:
+      # This test fails due to translation errors
+      pass
 
 def test_normal_queue():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _normal_queue )
+  test_func = _normal_queue
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test
 
 def test_normal_queue_stall():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _normal_queue_stall )
+  test_func = _normal_queue_stall
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test
 
 def test_pipe_queue():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _pipe_queue )
+  test_func = _pipe_queue
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test
 
 def test_pipe_queue_stall():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _pipe_queue_stall )
+  test_func = _pipe_queue_stall
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test
 
 def test_bypass_queue():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _bypass_queue )
+  test_func = _bypass_queue
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test
 
 def test_bypass_queue_stall():
-  _run_queue_test_replace_run_sim( yosys_run_sim, _bypass_queue_stall )
+  test_func = _bypass_queue_stall
+  _run_test = test_func.__globals__['run_sim']
+  test_func.__globals__['run_sim'] = run_sim
+  try:
+    test_func()
+  finally:
+    test_func.__globals__['run_sim'] = _run_test

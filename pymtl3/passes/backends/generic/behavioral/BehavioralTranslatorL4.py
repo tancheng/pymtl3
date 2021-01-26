@@ -16,6 +16,11 @@ from .BehavioralTranslatorL3 import BehavioralTranslatorL3
 
 
 class BehavioralTranslatorL4( BehavioralTranslatorL3 ):
+  def __init__( s, top ):
+    super().__init__( top )
+
+  def clear( s, tr_top ):
+    super().clear( tr_top )
 
   #-----------------------------------------------------------------------
   # _gen_behavioral_trans_metadata
@@ -23,11 +28,10 @@ class BehavioralTranslatorL4( BehavioralTranslatorL3 ):
 
   # Override
   def _gen_behavioral_trans_metadata( s, m ):
-    m.apply( BehavioralRTLIRGenL4Pass( s.tr_top ) )
-    m.apply( BehavioralRTLIRTypeCheckL4Pass( s.tr_top ) )
-    s.behavioral.rtlir[m] = \
-        m.get_metadata( BehavioralRTLIRGenL4Pass.rtlir_upblks )
+    m.apply( BehavioralRTLIRGenL4Pass() )
+    m.apply( BehavioralRTLIRTypeCheckL4Pass() )
+    s.behavioral.rtlir[m] = m._pass_behavioral_rtlir_gen.rtlir_upblks
     s.behavioral.freevars[m] =\
-        m.get_metadata( BehavioralRTLIRTypeCheckL4Pass.rtlir_freevars )
+        m._pass_behavioral_rtlir_type_check.rtlir_freevars
     s.behavioral.tmpvars[m] =\
-        m.get_metadata( BehavioralRTLIRTypeCheckL4Pass.rtlir_tmpvars )
+        m._pass_behavioral_rtlir_type_check.rtlir_tmpvars

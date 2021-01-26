@@ -33,14 +33,14 @@ def local_do_test( m ):
   if isinstance(m, type):
     m = m.DUT()
   m.elaborate()
-  m.apply( BehavioralRTLIRGenL5Pass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckL5Pass( m ) )
+  m.apply( BehavioralRTLIRGenL5Pass() )
+  m.apply( BehavioralRTLIRTypeCheckL5Pass() )
   m.apply( BehavioralRTLIRVisualizationPass() )
 
   try:
     ref = m._rtlir_test_ref
     for blk in m.get_update_blocks():
-      upblk = m.get_metadata( BehavioralRTLIRGenL5Pass.rtlir_upblks )[ blk ]
+      upblk = m._pass_behavioral_rtlir_gen.rtlir_upblks[ blk ]
       assert upblk == ref[ blk.__name__ ]
   except AttributeError:
     pass

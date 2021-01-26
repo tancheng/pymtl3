@@ -6,7 +6,6 @@
 """Provide the level 1 SystemVerilog translator implementation."""
 
 from collections import deque
-from contextlib import contextmanager
 
 from pymtl3.datatypes import Bits, Bits32
 from pymtl3.passes.backends.generic.behavioral.BehavioralTranslatorL1 import (
@@ -95,7 +94,7 @@ class VBehavioralTranslatorL1( VBehavioralTranslatorL0, BehavioralTranslatorL1 )
     assert isinstance( rtype, rt.Const ), \
       f'{id_} freevar should be a constant!'
     assert isinstance( rtype.get_dtype(), rdt.Vector ), \
-      f'{id_} freevar should be a (list of) integer/BitStruct at L1!'
+      f'{id_} freevar should be a (list of) integer/BitStruct!'
     return s.rtlir_tr_const_decl( '__const__'+id_, rtype, array_type, dtype, obj )
 
 #-------------------------------------------------------------------------
@@ -163,10 +162,6 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
         s.closure[ var ] = blk.__closure__[ i ].cell_contents
       except ValueError:
         pass
-
-    # Are we inside the LHS of an assignemnt?
-
-    s.is_assign_LHS = False
 
     return s.visit( rtlir )
 
@@ -239,26 +234,20 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
       target._top_expr = True
     node.value._top_expr = True
 
-    with s.register_assign_LHS():
-      targets     = [ s.visit( target ) for target in node.targets ]
-
+    targets       = [ s.visit( target ) for target in node.targets ]
     value         = s.visit( node.value )
     assignment_op = '<=' if not node.blocking else '='
     tplt = '{target} {assignment_op} {value};'
-
     return [ tplt.format(
       target = target, assignment_op = assignment_op, value = value
     ) for target in reversed(targets) ]
 
-  # register_assign_LHS
+  #-----------------------------------------------------------------------
+  # visit_If
+  #-----------------------------------------------------------------------
 
-  @contextmanager
-  def register_assign_LHS( s ):
-    assert not s.is_assign_LHS
-    s.is_assign_LHS = True
-    yield
-    assert s.is_assign_LHS
-    s.is_assign_LHS = False
+  def visit_If( s, node ):
+    raise VerilogTranslationError( s.blk, node, "If not supported at L1" )
 
   #-----------------------------------------------------------------------
   # visit_For
@@ -277,9 +266,8 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
   #-----------------------------------------------------------------------
 
   def visit_Number( s, node ):
-    """Return a number in string."""
-    nbits = node.Type.get_dtype().get_length()
-    return f"{nbits}'d{node.value}"
+    """Return a number in string without width specifier."""
+    return str( node.value )
 
   #-----------------------------------------------------------------------
   # visit_Concat
@@ -301,13 +289,14 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
     node.value._top_expr = True
 
     value = s.visit( node.value )
-    target_nbits = node.nbits
+    try:
+      target_nbits = int(node.nbits._value)
+    except AttributeError:
+      raise VerilogTranslationError( s.blk, node,
+        "new bitwidth of zero extension must be known at elaboration time!" )
     current_nbits = int(node.value.Type.get_dtype().get_length())
     padded_nbits = target_nbits - current_nbits
-    if padded_nbits == 0:
-      return value
-    else:
-      return f"{{ {{ {padded_nbits} {{ 1'b0 }} }}, {value} }}"
+    return f"{{ {{ {padded_nbits} {{ 1'b0 }} }}, {value} }}"
 
   #-----------------------------------------------------------------------
   # visit_SignExt
@@ -320,13 +309,15 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
     node.value._top_expr = True
 
     value = s.visit( node.value )
-    target_nbits = node.nbits
+    try:
+      target_nbits = int(node.nbits._value)
+    except AttributeError:
+      raise VerilogTranslationError( s.blk, node,
+        "new bitwidth of sign extension must be known at elaboration time!" )
+
     current_nbits = int(node.value.Type.get_dtype().get_length())
     last_bit = current_nbits - 1
     padded_nbits = target_nbits - current_nbits
-
-    if padded_nbits == 0:
-      return value
 
     template = "{{ {{ {padded_nbits} {{ {value}[{last_bit}] }} }}, {value} }}"
     one_bit_template = "{{ {{ {padded_nbits} {{ {_value} }} }}, {value} }}"
@@ -363,29 +354,6 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
       return template.format( **locals() )
 
   #-----------------------------------------------------------------------
-  # visit_Truncate
-  #-----------------------------------------------------------------------
-  # To quote the LRM about the size casting operator:
-  # When changing the size, the cast shall return the value that a packed
-  # array type with a single [n-1:0] dimension would hold after being
-  # assigned the expression, where n is the cast size. The signedness shall
-  # pass through unchanged.
-  #
-  # This means if we translate the truncation into a size casting expression,
-  # the same semantics is preserved. This seems a better approach to me
-  # than slicing because iirc slicing over integer literals is an error
-  # in Verilator.
-
-  def visit_Truncate( s, node ):
-    nbits = node.nbits
-    value = s.visit( node.value )
-    dtype = node.value.Type.get_dtype()
-    if isinstance(dtype, rdt.Vector) and dtype.get_length() > nbits:
-      return f"{nbits}'({value})"
-    else:
-      return value
-
-  #-----------------------------------------------------------------------
   # visit_Reduce
   #-----------------------------------------------------------------------
 
@@ -411,10 +379,10 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
     nbits = node.nbits
     value = s.visit( node.value )
     if hasattr( node, "_value" ):
-      # value could be larger than what nbits can hold because it might
-      # be a negative number. Since verilator errors when that happens, we
-      # need to manually truncate the integer.
-      value = int(Bits(nbits, node._value))
+      if isinstance( node._value, Bits ):
+        value = int(node._value)
+      else:
+        value = node._value
       return f"{nbits}'d{value}"
 
     return f"{nbits}'( {value} )"
@@ -476,11 +444,7 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
       # The base of this attribute node is the component 's'.
       # Example: s.out, s.STATE_IDLE
       # assert node.value.base is s.component
-      if isinstance( node.Type, rt.Const ) and isinstance( node.Type.get_dtype(), rdt.Vector ):
-        nbits = node.Type.get_dtype().get_length()
-        ret = f"{nbits}'( {attr} )"
-      else:
-        ret = attr
+      ret = attr
     else:
       raise VerilogTranslationError( s.blk, node,
           "sub-components are not supported at L1" )
@@ -509,15 +473,8 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
             # format(node.value) )
 
       if isinstance( subtype, ( rt.Port, rt.Wire, rt.Const ) ):
-        # Special case for situations like s.literal_int_array[0]
-        # TODO: verify that these cases have been captured by the
-        # constant extraction.
-        assert not isinstance( node.Type, rt.Const )
-        # if isinstance( node.Type, rt.Const ):
-        #   nbits = node.Type.get_dtype().get_length()
-        #   return f"{nbits}'({value}[{idx}])"
-
-        return s.process_unpacked_q( node,
+        # return f'{value}[{idx}]'
+        return s.process_unpacked_q( node, 
             f'{value}[{idx}]', f'{value}{{}}[{idx}]' )
       else:
         # is this branch ever taken?
@@ -563,9 +520,7 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
     # Regular [ lower : upper ] syntax
     else:
       if hasattr( node.upper, '_value' ):
-        upper = str( int( node.upper._value - 1 ) )
-        nbits = node.upper.Type.get_dtype().get_length()
-        upper = f"{nbits}'d{upper}"
+        upper = str( int( node.upper._value - Bits32(1) ) )
       else:
         upper = s.visit( node.upper ) + '-1'
 
@@ -590,8 +545,7 @@ class BehavioralRTLIRToVVisitorL1( bir.BehavioralRTLIRNodeVisitor ):
   #-----------------------------------------------------------------------
 
   def visit_FreeVar( s, node ):
-    nbits = node.Type.get_dtype().get_length()
-    return f"{nbits}'( __const__{node.name} )"
+    return f'__const__{node.name}'
 
   #-----------------------------------------------------------------------
   # visit_TmpVar

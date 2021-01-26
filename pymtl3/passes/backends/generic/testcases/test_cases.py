@@ -10,8 +10,6 @@ Date   : Dec 12, 2019
 
 from pymtl3.passes.rtlir import RTLIRDataType as rdt
 from pymtl3.passes.testcases import (
-    Bits32Foo,
-    Bits32x5Foo,
     CaseArrayBits32IfcInComp,
     CaseBits32ArrayClosureConstruct,
     CaseBits32ClosureConstruct,
@@ -56,10 +54,7 @@ from pymtl3.passes.testcases import (
     CaseTwoUpblksFreevarsComp,
     CaseTwoUpblksSliceComp,
     CaseTwoUpblksStructTmpWireComp,
-    CaseUpdateffMixAssignComp,
     CaseWiresDrivenComp,
-    NestedBits32Foo,
-    NestedStructPackedArray,
     set_attributes,
 )
 
@@ -260,7 +255,7 @@ CaseBits32FreeVarToTmpVarComp = set_attributes( CaseBits32FreeVarToTmpVarComp,
     'REF_TMPVAR',
     '''\
         tmpvars:
-          tmpvar: u in upblk of Vector1
+          tmpvar: u in upblk of Vector32
     ''',
     'REF_SRC',
     '''\
@@ -276,7 +271,7 @@ CaseBits32FreeVarToTmpVarComp = set_attributes( CaseBits32FreeVarToTmpVarComp,
         wire_decls:
         component_decls:
         tmpvars:
-          tmpvar: u in upblk of Vector1
+          tmpvar: u in upblk of Vector32
         upblk_srcs:
           upblk_src: upblk
         connections:
@@ -331,7 +326,7 @@ CaseBits32ConstIntToTmpVarComp = set_attributes( CaseBits32ConstIntToTmpVarComp,
     'REF_TMPVAR',
     '''\
         tmpvars:
-          tmpvar: u in upblk of Vector1
+          tmpvar: u in upblk of Vector32
     ''',
     'REF_SRC',
     '''\
@@ -346,7 +341,7 @@ CaseBits32ConstIntToTmpVarComp = set_attributes( CaseBits32ConstIntToTmpVarComp,
         wire_decls:
         component_decls:
         tmpvars:
-          tmpvar: u in upblk of Vector1
+          tmpvar: u in upblk of Vector32
         upblk_srcs:
           upblk_src: upblk
         connections:
@@ -366,15 +361,15 @@ CaseStructTmpWireComp = set_attributes( CaseStructTmpWireComp,
     'REF_TMPVAR',
     '''\
         tmpvars:
-          tmpvar: u in upblk of Struct Bits32Foo__foo_32
+          tmpvar: u in upblk of Struct Bits32Foo
     ''',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
+        struct Bits32Foo
         component DUT
         (
         port_decls:
-          port_decl: in_ Port of Struct Bits32Foo__foo_32
+          port_decl: in_ Port of Struct Bits32Foo
           port_decl: out Port of Vector32
         interface_decls:
         );
@@ -383,7 +378,7 @@ CaseStructTmpWireComp = set_attributes( CaseStructTmpWireComp,
         wire_decls:
         component_decls:
         tmpvars:
-          tmpvar: u in upblk of Bits32Foo__foo_32
+          tmpvar: u in upblk of Bits32Foo
         upblk_srcs:
           upblk_src: upblk
         connections:
@@ -404,18 +399,18 @@ CaseTwoUpblksStructTmpWireComp = set_attributes( CaseTwoUpblksStructTmpWireComp,
     'REF_TMPVAR',
     '''\
         tmpvars:
-          tmpvar: u in multi_upblks_1 of Struct Bits32Foo__foo_32
-          tmpvar: u in multi_upblks_2 of Struct Bits32Bar__bar_32
+          tmpvar: u in multi_upblks_1 of Struct Bits32Foo
+          tmpvar: u in multi_upblks_2 of Struct Bits32Bar
     ''',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
-        struct Bits32Bar__bar_32
+        struct Bits32Foo
+        struct Bits32Bar
         component DUT
         (
         port_decls:
-          port_decl: in_bar Port of Struct Bits32Bar__bar_32
-          port_decl: in_foo Port of Struct Bits32Foo__foo_32
+          port_decl: in_bar Port of Struct Bits32Bar
+          port_decl: in_foo Port of Struct Bits32Foo
           port_decl: out_bar Port of Vector32
           port_decl: out_foo Port of Vector32
         interface_decls:
@@ -425,8 +420,8 @@ CaseTwoUpblksStructTmpWireComp = set_attributes( CaseTwoUpblksStructTmpWireComp,
         wire_decls:
         component_decls:
         tmpvars:
-          tmpvar: u in multi_upblks_1 of Bits32Foo__foo_32
-          tmpvar: u in multi_upblks_2 of Bits32Bar__bar_32
+          tmpvar: u in multi_upblks_1 of Bits32Foo
+          tmpvar: u in multi_upblks_2 of Bits32Bar
         upblk_srcs:
           upblk_src: multi_upblks_1
           upblk_src: multi_upblks_2
@@ -485,11 +480,11 @@ CaseStructIfcTmpVarOutComp = set_attributes( CaseStructIfcTmpVarOutComp,
     'REF_TMPVAR',
     '''\
         tmpvars:
-          tmpvar: u in upblk of Struct Bits32Foo__foo_32
+          tmpvar: u in upblk of Struct Bits32Foo
     ''',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
+        struct Bits32Foo
         component DUT
         (
         port_decls:
@@ -497,14 +492,14 @@ CaseStructIfcTmpVarOutComp = set_attributes( CaseStructIfcTmpVarOutComp,
         interface_decls:
           interface_decl: ifc InterfaceView Bits32FooInIfc
             interface_ports:
-              interface_port: foo Port of Struct Bits32Foo__foo_32
+              interface_port: foo Port of Struct Bits32Foo
         );
         const_decls:
         freevars:
         wire_decls:
         component_decls:
         tmpvars:
-          tmpvar: u in upblk of Bits32Foo__foo_32
+          tmpvar: u in upblk of Bits32Foo
         upblk_srcs:
           upblk_src: upblk
         connections:
@@ -894,6 +889,7 @@ CaseBits32ArrayClosureConstruct = set_attributes( CaseBits32ArrayClosureConstruc
         );
         const_decls:
         freevars:
+          freevar: foo_at_upblk
         wire_decls:
         component_decls:
         tmpvars:
@@ -909,7 +905,10 @@ CaseBits32ArrayClosureConstruct = set_attributes( CaseBits32ArrayClosureConstruc
           upblk_src: upblk
     ''',
     'REF_FREEVAR',
-    'freevars:\n'
+    '''\
+        freevars:
+          freevar: foo_at_upblk
+    '''
 )
 
 CaseConnectBitSelToOutComp = set_attributes( CaseConnectBitSelToOutComp,
@@ -1133,7 +1132,7 @@ CaseStructPortOnly = set_attributes( CaseStructPortOnly,
     'REF_PORT',
     '''\
         port_decls:
-          port_decl: in_ Port of Struct Bits32Foo__foo_32
+          port_decl: in_ Port of Struct Bits32Foo
     ''',
     'REF_WIRE',
     'wire_decls:\n',
@@ -1143,11 +1142,11 @@ CaseStructPortOnly = set_attributes( CaseStructPortOnly,
     'connections:\n',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
+        struct Bits32Foo
         component DUT
         (
         port_decls:
-          port_decl: in_ Port of Struct Bits32Foo__foo_32
+          port_decl: in_ Port of Struct Bits32Foo
         interface_decls:
         );
         const_decls:
@@ -1161,7 +1160,7 @@ CaseStructPortOnly = set_attributes( CaseStructPortOnly,
         endcomponent
     ''',
     'REF_STRUCT',
-    [(rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}), 'Bits32Foo__foo_32')]
+    [(rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}), 'Bits32Foo')]
 )
 
 CaseStructWireDrivenComp = set_attributes( CaseStructWireDrivenComp,
@@ -1172,7 +1171,7 @@ CaseStructWireDrivenComp = set_attributes( CaseStructWireDrivenComp,
     'REF_WIRE',
     '''\
         wire_decls:
-          wire_decl: foo Wire of Struct Bits32Foo__foo_32
+          wire_decl: foo Wire of Struct Bits32Foo
     ''',
     'REF_CONST',
     'const_decls:\n',
@@ -1180,7 +1179,7 @@ CaseStructWireDrivenComp = set_attributes( CaseStructWireDrivenComp,
     'connections:\n',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
+        struct Bits32Foo
         component DUT
         (
         port_decls:
@@ -1189,7 +1188,7 @@ CaseStructWireDrivenComp = set_attributes( CaseStructWireDrivenComp,
         const_decls:
         freevars:
         wire_decls:
-          wire_decl: foo Wire of Struct Bits32Foo__foo_32
+          wire_decl: foo Wire of Struct Bits32Foo
         component_decls:
         tmpvars:
         upblk_srcs:
@@ -1199,7 +1198,7 @@ CaseStructWireDrivenComp = set_attributes( CaseStructWireDrivenComp,
         endcomponent
     ''',
     'REF_STRUCT',
-    [(rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}), 'Bits32Foo__foo_32')]
+    [(rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}), 'Bits32Foo')]
 )
 
 CaseStructConstComp = set_attributes( CaseStructConstComp,
@@ -1212,7 +1211,7 @@ CaseStructConstComp = set_attributes( CaseStructConstComp,
     'REF_CONST',
     '''\
         const_decls:
-          const_decl: struct_const Const of Struct Bits32Foo__foo_32
+          const_decl: struct_const Const of Struct Bits32Foo
     ''',
     'REF_CONN',
     'connections:\n',
@@ -1234,7 +1233,7 @@ CaseStructConstComp = set_attributes( CaseStructConstComp,
         endcomponent
     ''',
     'REF_STRUCT',
-    [(rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}), 'Bits32Foo__foo_32')]
+    [(rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}), 'Bits32Foo')]
 )
 
 CaseStructx5PortOnly = set_attributes( CaseStructx5PortOnly,
@@ -1253,7 +1252,7 @@ CaseStructx5PortOnly = set_attributes( CaseStructx5PortOnly,
     'connections:\n',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
+        struct Bits32Foo
         component DUT
         (
         port_decls:
@@ -1271,7 +1270,7 @@ CaseStructx5PortOnly = set_attributes( CaseStructx5PortOnly,
         endcomponent
     ''',
     'REF_STRUCT',
-    [(rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}), 'Bits32Foo__foo_32')]
+    [(rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}), 'Bits32Foo')]
 )
 
 CaseNestedStructPortOnly = set_attributes( CaseNestedStructPortOnly,
@@ -1280,7 +1279,7 @@ CaseNestedStructPortOnly = set_attributes( CaseNestedStructPortOnly,
     'REF_PORT',
     '''\
         port_decls:
-          port_decl: in_ Port of Struct NestedBits32Foo__foo_Bits32Foo__foo_32
+          port_decl: in_ Port of Struct NestedBits32Foo
     ''',
     'REF_WIRE',
     'wire_decls:\n',
@@ -1290,12 +1289,12 @@ CaseNestedStructPortOnly = set_attributes( CaseNestedStructPortOnly,
     'connections:\n',
     'REF_SRC',
     '''\
-        struct Bits32Foo__foo_32
-        struct NestedBits32Foo__foo_Bits32Foo__foo_32
+        struct Bits32Foo
+        struct NestedBits32Foo
         component DUT
         (
         port_decls:
-          port_decl: in_ Port of Struct NestedBits32Foo__foo_Bits32Foo__foo_32
+          port_decl: in_ Port of Struct NestedBits32Foo
         interface_decls:
         );
         const_decls:
@@ -1310,8 +1309,8 @@ CaseNestedStructPortOnly = set_attributes( CaseNestedStructPortOnly,
     ''',
     'REF_STRUCT',
     [
-      (rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}), 'Bits32Foo__foo_32'),
-      (rdt.Struct(NestedBits32Foo, {'foo':rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)})}), 'NestedBits32Foo__foo_Bits32Foo__foo_32'),
+      (rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}), 'Bits32Foo'),
+      (rdt.Struct('NestedBits32Foo', {'foo':rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)})}), 'NestedBits32Foo'),
     ]
 )
 
@@ -1321,8 +1320,8 @@ CaseNestedPackedArrayStructComp = set_attributes( CaseNestedPackedArrayStructCom
     'REF_PORT',
     '''\
         port_decls:
-          port_decl: in_ Port of Struct NestedStructPackedArray__foo_Bits32x5Foo__foo_32x5x5
-          port_decl: out Port of Struct Bits32x5Foo__foo_32x5
+          port_decl: in_ Port of Struct NestedStructPackedArray
+          port_decl: out Port of Struct Bits32x5Foo
     ''',
     'REF_WIRE',
     'wire_decls:\n',
@@ -1335,13 +1334,13 @@ CaseNestedPackedArrayStructComp = set_attributes( CaseNestedPackedArrayStructCom
     ''',
     'REF_SRC',
     '''\
-        struct Bits32x5Foo__foo_32x5
-        struct NestedStructPackedArray__foo_Bits32x5Foo__foo_32x5x5
+        struct Bits32x5Foo
+        struct NestedStructPackedArray
         component DUT
         (
         port_decls:
-          port_decl: in_ Port of Struct NestedStructPackedArray__foo_Bits32x5Foo__foo_32x5x5
-          port_decl: out Port of Struct Bits32x5Foo__foo_32x5
+          port_decl: in_ Port of Struct NestedStructPackedArray
+          port_decl: out Port of Struct Bits32x5Foo
         interface_decls:
         );
         const_decls:
@@ -1357,8 +1356,8 @@ CaseNestedPackedArrayStructComp = set_attributes( CaseNestedPackedArrayStructCom
     ''',
     'REF_STRUCT',
     [
-      (rdt.Struct(Bits32x5Foo, {'foo':rdt.PackedArray([5], rdt.Vector(32))}), 'Bits32x5Foo__foo_32x5'),
-      (rdt.Struct(NestedStructPackedArray, {'foo':rdt.PackedArray([5], rdt.Struct(Bits32x5Foo, {'foo':rdt.PackedArray([5], rdt.Vector(32))}))}), 'NestedStructPackedArray__foo_Bits32x5Foo__foo_32x5x5'),
+      (rdt.Struct('Bits32x5Foo', {'foo':rdt.PackedArray([5], rdt.Vector(32))}), 'Bits32x5Foo'),
+      (rdt.Struct('NestedStructPackedArray', {'foo':rdt.Struct('Bits32x5Foo', {'foo':rdt.PackedArray([5], rdt.Vector(32))})}), 'NestedStructPackedArray'),
     ]
 )
 

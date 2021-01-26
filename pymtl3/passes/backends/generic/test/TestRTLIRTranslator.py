@@ -31,12 +31,12 @@ class TestRTLIRTranslator( RTLIRTranslator,
   def rtlir_tr_src_layout( s, hierarchy ):
     # struct definitions
     struct_defs = \
-      "".join( f"struct {x}\n" for x in hierarchy.decl_type_struct.values() )
+      "".join( f"struct {x[1]}\n" for x in hierarchy.decl_type_struct )
     component_src = hierarchy.component_src
     return struct_defs + component_src
 
   def rtlir_tr_components( s, components ):
-    return "\n".join(components.values())
+    return "\n".join(components)
 
   def rtlir_tr_component( s, behavioral, structural ):
     template = \

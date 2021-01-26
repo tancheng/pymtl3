@@ -15,7 +15,6 @@ from pymtl3.passes.rtlir.rtype import RTLIRDataType as rdt
 from pymtl3.passes.rtlir.rtype import RTLIRType as rt
 from pymtl3.passes.rtlir.util.test_utility import do_test, expected_failure
 from pymtl3.passes.testcases import (
-    Bits32Foo,
     CaseBits32TmpWireComp,
     CaseScopeTmpWireOverwriteConflictComp,
     CaseStructTmpWireComp,
@@ -25,15 +24,15 @@ from pymtl3.passes.testcases import (
 
 def local_do_test( m ):
   """Check if generated behavioral RTLIR is the same as reference."""
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
   m.apply( BehavioralRTLIRVisualizationPass() )
   ref = m._rtlir_tmpvar_ref
-  rtlir_tmpvars = m.get_metadata( BehavioralRTLIRTypeCheckPass.rtlir_tmpvars )
+  ns = m._pass_behavioral_rtlir_type_check
 
   for tvar_name in ref.keys():
-    assert tvar_name in rtlir_tmpvars
-    assert rtlir_tmpvars[tvar_name] == ref[tvar_name]
+    assert tvar_name in ns.rtlir_tmpvars
+    assert ns.rtlir_tmpvars[tvar_name] == ref[tvar_name]
 
 def test_tmp_wire( do_test ):
   a = CaseBits32TmpWireComp.DUT()
@@ -45,7 +44,7 @@ def test_tmp_wire_struct( do_test ):
   a = CaseStructTmpWireComp.DUT()
   a.elaborate()
   a._rtlir_tmpvar_ref = \
-    {('u', 'upblk') : rt.Wire(rdt.Struct(Bits32Foo, {'foo':rdt.Vector(32)}))}
+    {('u', 'upblk') : rt.Wire(rdt.Struct('Bits32Foo', {'foo':rdt.Vector(32)}))}
   do_test( a )
 
 def test_tmp_wire_overwrite_conflict_type( do_test ):

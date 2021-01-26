@@ -20,6 +20,8 @@ from .BehavioralTranslatorL0 import BehavioralTranslatorL0
 
 
 class BehavioralTranslatorL1( BehavioralTranslatorL0 ):
+  def __init__( s, top ):
+    super().__init__( top )
 
   def clear( s, tr_top ):
     super().clear( tr_top )
@@ -44,12 +46,12 @@ class BehavioralTranslatorL1( BehavioralTranslatorL0 ):
   #-----------------------------------------------------------------------
 
   def _gen_behavioral_trans_metadata( s, m ):
-    m.apply( BehavioralRTLIRGenL1Pass( s.tr_top ) )
-    m.apply( BehavioralRTLIRTypeCheckL1Pass( s.tr_top ) )
+    m.apply( BehavioralRTLIRGenL1Pass() )
+    m.apply( BehavioralRTLIRTypeCheckL1Pass() )
     s.behavioral.rtlir[m] = \
-        m.get_metadata( BehavioralRTLIRGenL1Pass.rtlir_upblks )
+        m._pass_behavioral_rtlir_gen.rtlir_upblks
     s.behavioral.freevars[m] = \
-        m.get_metadata( BehavioralRTLIRTypeCheckL1Pass.rtlir_freevars )
+        m._pass_behavioral_rtlir_type_check.rtlir_freevars
 
   #-----------------------------------------------------------------------
   # translate_behavioral
@@ -59,8 +61,7 @@ class BehavioralTranslatorL1( BehavioralTranslatorL0 ):
   def translate_behavioral( s, m ):
     """Translate behavioral part of `m`."""
     # Get upblk metadata
-    s.behavioral.accessed[m] = \
-        m.get_metadata( BehavioralRTLIRTypeCheckL1Pass.rtlir_accessed )
+    s.behavioral.accessed[m] = m._pass_behavioral_rtlir_type_check.rtlir_accessed
     # Translate upblks
     upblk_decls = []
     upblk_srcs = []
@@ -95,34 +96,25 @@ class BehavioralTranslatorL1( BehavioralTranslatorL0 ):
 
     # Generate free variable declarations
     freevars = []
-    for name, (fvar, rtype) in s.behavioral.freevars[m].items():
-      freevars.append( s.translate_freevar( name, fvar, rtype ) )
+    for name, fvar in s.behavioral.freevars[m].items():
+      rtype = rt.get_rtlir( fvar )
+      if isinstance( rtype, rt.Array ):
+        fvar_rtype = rtype.get_sub_type()
+        array_rtype = rtype
+      else:
+        fvar_rtype = rtype
+        array_rtype = None
+      dtype = fvar_rtype.get_dtype()
+      assert isinstance( dtype, rdt.Vector ), \
+        f'{name} freevar should be an integer or a list of integers!'
+      freevars.append( s.rtlir_tr_behavioral_freevar(
+        name,
+        fvar_rtype,
+        s.rtlir_tr_unpacked_array_type( array_rtype ),
+        s.rtlir_tr_vector_dtype( dtype ),
+        fvar
+      ) )
     s.behavioral.decl_freevars[m] = s.rtlir_tr_behavioral_freevars(freevars)
-
-  #-----------------------------------------------------------------------
-  # translate_freevar
-  #-----------------------------------------------------------------------
-
-  def translate_freevar( s, name, fvar, rtype ):
-    if isinstance( rtype, rt.Array ):
-      fvar_rtype = rtype.get_sub_type()
-      array_rtype = rtype
-    else:
-      fvar_rtype = rtype
-      array_rtype = None
-    dtype = fvar_rtype.get_dtype()
-    return s.rtlir_tr_behavioral_freevar(
-      name,
-      fvar_rtype,
-      s.rtlir_tr_unpacked_array_type( array_rtype ),
-      s.dispatch_freevar_datatype( dtype ),
-      fvar
-    )
-
-  def dispatch_freevar_datatype( s, dtype ):
-    assert isinstance( dtype, rdt.Vector ), \
-      f'{name} freevar should be an integer or a list of integers at L1!'
-    return s.rtlir_tr_vector_dtype( dtype )
 
   #-----------------------------------------------------------------------
   # Methods to be implemented by the backend translator

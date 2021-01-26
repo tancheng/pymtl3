@@ -13,15 +13,11 @@ from pymtl3.passes.backends.verilog.util.test_utility import check_eq
 from pymtl3.passes.backends.verilog.util.utility import verilog_reserved
 
 from ....testcases import (
-    CaseBitSelOverBitSelComp,
-    CaseBitSelOverPartSelComp,
     CaseConnectBitsConstToOutComp,
     CaseConnectBitSelToOutComp,
     CaseConnectConstToOutComp,
     CaseConnectInToWireComp,
     CaseConnectSliceToOutComp,
-    CasePartSelOverBitSelComp,
-    CasePartSelOverPartSelComp,
 )
 from ..VStructuralTranslatorL1 import VStructuralTranslatorL1
 
@@ -60,10 +56,6 @@ def run_test( case, m ):
     CaseConnectConstToOutComp,
     CaseConnectBitSelToOutComp,
     CaseConnectSliceToOutComp,
-    CaseBitSelOverBitSelComp,
-    CaseBitSelOverPartSelComp,
-    CasePartSelOverBitSelComp,
-    CasePartSelOverPartSelComp,
   ]
 )
 def test_verilog_structural_L1( case ):

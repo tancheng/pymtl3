@@ -5,11 +5,6 @@
 # Date   : Feb 13, 2019
 """Helper methods for RTLIR."""
 
-from pymtl3.datatypes import is_bitstruct_class
-
-from ..rtype.RTLIRDataType import get_rtlir_dtype
-
-
 def collect_objs( m, Type ):
   """Return a list of members of `m` that are of type `Type`."""
 
@@ -31,10 +26,7 @@ def get_component_full_name( c_rtype ):
 
   def get_string( obj ):
     """Return the string that identifies `obj`"""
-    if isinstance(obj, type):
-      if is_bitstruct_class(obj):
-        return get_rtlir_dtype( obj() ).get_name()
-      return obj.__name__
+    if isinstance(obj, type): return obj.__name__
     return str( obj )
 
   comp_name = c_rtype.get_name()
@@ -43,8 +35,6 @@ def get_component_full_name( c_rtype ):
   for arg_name, arg_value in comp_params:
     assert arg_name != ''
     comp_name += '__' + arg_name + '_' + get_string(arg_value)
-  if not comp_params:
-    comp_name += '_noparam'
   return comp_name
 
 def get_ordered_upblks( m ):

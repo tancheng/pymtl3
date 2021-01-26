@@ -10,7 +10,7 @@ Date   : Apr 16, 2018
 import types
 from collections import deque
 
-from pymtl3.datatypes import Bits, Bits1, is_bitstruct_class, mk_bits
+from pymtl3.datatypes import Bits, Bits1, mk_bits
 
 from .errors import InvalidConnectionError
 from .NamedObject import DSLMetadata, NamedObject
@@ -63,6 +63,7 @@ def _connect_check( o1, o2, internal ):
 
   o1_connectable = False
   o2_connectable = False
+  top = None
 
   # Get access to the top level component by identifying a connectable
 
@@ -80,18 +81,20 @@ def _connect_check( o1, o2, internal ):
   if not o1_connectable and not o2_connectable:
     if internal:  return None, False, False
 
-    raise InvalidConnectionError(f"class {type(o1)} and class {type(o2)} are both not connectable.\n"
-                                 f"  (when connecting {o1!r} to {o2!r})")
+    raise InvalidConnectionError("class {} and class {} are both not connectable.\n"
+                                  "  (when connecting {} to {})" \
+        .format( type(o1), type(o2), repr(o1), repr(o2)) )
 
   # Get the component from elaborate_stack
+
   try:
-    host = NamedObject._elaborate_stack[-1]
+    host = top._dsl.elaborate_stack[-1]
   except AttributeError:
     raise InvalidConnectionError("Cannot call connect after elaboration.\n"
                                  "- Please use top.add_connection(...) API.")
 
   if isinstance( host, Placeholder ):
-    raise InvalidPlaceholderError( "Cannot call connect {}"
+    raise InvalidPlaceholderError( "Cannot call connect "
           "in a placeholder component.".format( blk.__name__ ) )
 
   # Not sure if there is any case where we cannot get the top plus it's
@@ -142,13 +145,7 @@ class Const( Connectable ):
 class Signal( NamedObject, Connectable ):
 
   def __init__( s, Type=Bits1 ):
-    if isinstance( Type, int ):
-      Type = mk_bits(Type)
-    else:
-      assert isinstance( Type, type ) and ( issubclass( Type, Bits ) or is_bitstruct_class(Type) ), \
-              f"RTL signal can only be of Bits type or bitstruct type, not {Type}.\n" \
-              f"Note: an integer is also accepted: Wire(32) is equivalent to Wire(Bits32))"
-
+    assert isinstance( Type, type ), "Use actual type instead of instance!"
     s._dsl.Type = Type
     s._dsl.type_instance = None
 
@@ -213,10 +210,8 @@ class Signal( NamedObject, Connectable ):
           xd.top_level_signal = sd.top_level_signal
           xd.elaborate_top = sd.elaborate_top
 
-          xd.my_name     = name + "".join([ f"[{y}]" for y in indices ])
-          xd.full_name   = f"{sd.full_name}.{name}"
-          xd._my_name    = name
-          xd._my_indices = indices
+          xd.my_name   = name + "".join([ f"[{y}]" for y in indices ])
+          xd.full_name = f"{sd.full_name}.{xd.my_name}"
 
         if parent_is_list:
           parent.append( x )
@@ -229,48 +224,34 @@ class Signal( NamedObject, Connectable ):
     pass # I have to override this to support a[0:1] |= b
 
   def __getitem__( s, idx ):
-    if not issubclass( s._dsl.Type, Bits ):
-      raise InvalidConnectionError( "We don't allow slicing on non-Bits signals." )
-
+    assert issubclass( s._dsl.Type, Bits )
     # Turn index into a slice
     if isinstance( idx, int ):
-      start, stop = idx, idx + 1
+      sl = slice( idx, idx+1 )
     elif isinstance( idx, slice ):
-      start, stop = idx.start, idx.stop
-    else: assert False, f"The slice {idx} is invalid"
+      sl = idx
+    else: assert False, "What the hell?"
 
-    if s._dsl.slice is None:
-      assert 0 <= start < stop <= s._dsl.Type.nbits, f"[{start}:{stop}] slice, check "\
-                                                     f"0 <= {start} < {stop} <= {s._dsl.Type.nbits}"
-      top_signal = s
-    else:
-      outer_start, outer_stop = s._dsl.slice.start, s._dsl.slice.stop
-      # slicing over sliced signals
-      assert 0 <= start < stop <= (outer_stop - outer_start), f"[{start}:{stop}] slice, check "\
-                                                              f"0 <= {start} < {stop} <= {outer_stop - outer_start}"
-      start += outer_start
-      stop  += outer_start
-      top_signal = s._dsl.parent_obj
+    sl_tuple = (sl.start, sl.stop)
 
-    sl_tuple = (start, stop)
-    if sl_tuple not in top_signal.__dict__:
-      x = top_signal.__class__( mk_bits( stop - start ) )
-
-      sd = top_signal._dsl
+    if sl_tuple not in s.__dict__:
+      assert 0 <= sl.start < sl.stop <= s._dsl.Type.nbits
+      x = s.__class__( mk_bits( sl.stop - sl.start) )
+      sd = s._dsl
       xd = x._dsl
-      xd.parent_obj = top_signal
+      xd.parent_obj = s
       xd.top_level_signal = sd.top_level_signal
-      xd.elaborate_top    = sd.elaborate_top
+      xd.elaborate_top = sd.elaborate_top
 
-      sl_str = f"[{start}:{stop}]"
+      sl_str = f"[{sl.start}:{sl.stop}]"
 
       xd.my_name   = f"{sd.my_name}{sl_str}"
       xd.full_name = f"{sd.full_name}{sl_str}"
 
-      xd.slice       = slice( start, stop )
-      top_signal.__dict__[ sl_tuple ] = sd.slices[ sl_tuple ] = x
+      xd.slice       = sl
+      s.__dict__[ sl_tuple ] = sd.slices[ sl_tuple ] = x
 
-    return top_signal.__dict__[ sl_tuple ]
+    return s.__dict__[ sl_tuple ]
 
   def default_value( s ):
     return s._dsl.Type()
@@ -327,7 +308,7 @@ class Signal( NamedObject, Connectable ):
     return leaf_signals
 
   def is_sliced_signal( s ):
-    return s._dsl.slice is not None
+    return not s._dsl.slice is None
 
   def is_top_level_signal( s ):
     return s._dsl.top_level_signal is s
@@ -476,11 +457,11 @@ class CallIfcRTL( Interface ):
 
       if s.MsgType is not None:
         trace_len += len( f'{s.MsgType()}' ) + 2
-        trace_fmt += "({s.msg})"
+        trace_fmt += f"({{s.msg}})"
 
       if s.RetType is not None:
         trace_len += 1 + len( f'{s.RetType()}' )
-        trace_fmt += "={s.ret}"
+        trace_fmt += f"={{s.ret}}"
 
       if trace_len == 0:
         trace_len = 1

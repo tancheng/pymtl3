@@ -19,4 +19,6 @@ from pymtl3.passes.rtlir.util.test_utility import do_test
 seed( 0xdeadebeef )
 
 def local_do_test( m ):
-  closed_loop_component_input_test( m, m._tvs, m._tv_in, "yosys" )
+  test_vector = m._test_vector
+  tv_in = m._tv_in
+  closed_loop_component_input_test( m, test_vector, tv_in, "yosys" )

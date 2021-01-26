@@ -21,7 +21,7 @@ Date   : Nov 3, 2018
 import re
 from collections import deque
 
-from .errors import FieldReassignError, NotElaboratedError
+from .errors import NotElaboratedError
 
 
 class DSLMetadata:
@@ -150,14 +150,6 @@ class NamedObject:
       # both NamedObject and list cases. Now I basically avoid the stack overheads
       # for common cases.
       if isinstance( obj, NamedObject ):
-        fields = sd.NamedObject_fields
-        if name in fields:
-          if getattr( s, name ) is obj:
-            return
-          raise FieldReassignError(f"The attempt to assign hardware construct to field {name} is illegal:\n"
-                                   f" - top{repr(s)[1:]} already has field {name} with type {type(getattr( s, name ))}.")
-        fields.add( name )
-
         ud = obj._dsl
 
         ud.parent_obj = s
@@ -185,14 +177,13 @@ class NamedObject:
                     ud.param_tree = ParamTreeNode()
                   ud.param_tree.merge( node )
 
-        ud.NamedObject_fields = set()
-
         # Point u's top to my top
-        top = ud.elaborate_top = sd.elaborate_top
+        top = sd.elaborate_top
+        ud.elaborate_top = top
 
-        NamedObject._elaborate_stack.append( obj )
+        top._dsl.elaborate_stack.append( obj )
         obj._construct()
-        NamedObject._elaborate_stack.pop()
+        top._dsl.elaborate_stack.pop()
 
       # ONLY LIST IS SUPPORTED, SORRY.
       # I don't want to support any iterable object because later "Wire"
@@ -200,13 +191,7 @@ class NamedObject:
       # casing Wire will be a mess around everywhere.
 
       elif isinstance( obj, list ) and obj and isinstance( obj[0], (NamedObject, list) ):
-        fields = sd.NamedObject_fields
-        if name in fields:
-          if getattr( s, name ) is obj:
-            return
-          raise FieldReassignError(f"The attempt to assign hardware construct to field {name} is illegal:\n"
-                                   f" - top{repr(s)[1:]} already has field {name} with type {type(getattr( s, name ))}.")
-        fields.add( name )
+        sd = s._dsl
 
         Q = deque( (u, (i,)) for i, u in enumerate(obj) )
 
@@ -242,14 +227,13 @@ class NamedObject:
                         ud.param_tree = ParamTreeNode()
                       ud.param_tree.merge( node )
 
-            ud.NamedObject_fields = set()
-
             # Point u's top to my top
-            top = ud.elaborate_top = sd.elaborate_top
+            top = sd.elaborate_top
+            ud.elaborate_top = top
 
-            NamedObject._elaborate_stack.append( u )
+            top._dsl.elaborate_stack.append( u )
             u._construct()
-            NamedObject._elaborate_stack.pop()
+            top._dsl.elaborate_stack.pop()
 
           elif isinstance( u, list ):
             Q.extend( (v, indices+(i,)) for i, v in enumerate(u) )
@@ -371,25 +355,24 @@ class NamedObject:
     s._dsl.my_name       = "s"
     s._dsl.full_name     = "s"
     s._dsl.elaborate_top = s
-    s._dsl.NamedObject_fields = set()
 
-    # Secret sauce for letting the child know the field name of itself
+    s._dsl.elaborate_stack = [ s ]
+
+    # Secret source for letting the child know the field name of itself
     # -- override setattr for elaboration, and remove it afterwards
-    # -- and the global elaborate to enable free function as decorator
 
     NamedObject.__setattr__ = NamedObject.__setattr_for_elaborate__
-    NamedObject._elaborate_stack = [ s ]
 
     try:
       s._construct()
     except Exception:
       # re-raise here after deleting __setattr__
       del NamedObject.__setattr__ # not harming the rest of execution
-      del NamedObject._elaborate_stack
       raise
 
     del NamedObject.__setattr__
-    del NamedObject._elaborate_stack
+
+    del s._dsl.elaborate_stack
 
   def _elaborate_collect_all_named_objects( s ):
     s._dsl.all_named_objects = s._collect_all_single()

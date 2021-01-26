@@ -7,41 +7,19 @@ Add clk/reset signals.
 Author : Yanghui Ou
   Date : Apr 6, 2019
 """
+from collections import defaultdict
+
+from pymtl3.datatypes import Bits1
 
 from .ComponentLevel1 import ComponentLevel1
 from .ComponentLevel7 import ComponentLevel7
-from .Connectable import (
-    Connectable,
-    Const,
-    InPort,
-    Interface,
-    MethodPort,
-    OutPort,
-    Signal,
-    Wire,
-)
-from .errors import (
-    InvalidAPICallError,
-    InvalidConnectionError,
-    NotElaboratedError,
-    UnsetMetadataError,
-)
-from .MetadataKey import MetadataKey
+from .Connectable import Const, InPort, Interface, MethodPort, OutPort, Signal, Wire
+from .errors import InvalidAPICallError, InvalidConnectionError, NotElaboratedError
 from .NamedObject import NamedObject
 from .Placeholder import Placeholder
 
 
 class Component( ComponentLevel7 ):
-
-  #-----------------------------------------------------------------------
-  # Private methods
-  #-----------------------------------------------------------------------
-
-  def __new__( cls, *args, **kwargs ):
-    inst = super().__new__( cls, *args, **kwargs )
-    # Maps a MetadataKey instance to its value
-    inst._metadata = {}
-    return inst
 
   # Override
   def _construct( s ):
@@ -49,8 +27,8 @@ class Component( ComponentLevel7 ):
     if not s._dsl.constructed:
 
       # clk and reset signals are added here.
-      s.clk   = InPort()
-      s.reset = InPort()
+      s.clk   = InPort( Bits1 )
+      s.reset = InPort( Bits1 )
 
       # Merge the actual keyword args and those args set by set_parameter
       if s._dsl.param_tree is None:
@@ -76,6 +54,9 @@ class Component( ComponentLevel7 ):
         parent._connect_signal_signal( s.clk, parent.clk )
         parent._connect_signal_signal( s.reset, parent.reset )
 
+      if s._dsl.call_kwargs is not None: # s.a = A()( b = s.b )
+        s._continue_call_connect()
+
       s._dsl.constructed = True
 
   # This function deduplicates those checks in each API
@@ -86,7 +67,7 @@ class Component( ComponentLevel7 ):
     except AttributeError:
       raise NotElaboratedError()
 
-  def _collect_objects_local( s, filt, sort_key = None ):
+  def _collect_objects_local( s, filt ):
     assert s._dsl.constructed
     ret = set()
     stack = []
@@ -101,10 +82,7 @@ class Component( ComponentLevel7 ):
       # ONLY LIST IS SUPPORTED
       elif isinstance( u, list ):
         stack.extend( u )
-    if sort_key:
-      return sorted( ret, key = sort_key )
-    else:
-      return list(ret)
+    return ret
 
   def _flush_pending_value_connections( s ):
     if s._dsl._has_pending_value_connections:
@@ -127,7 +105,7 @@ class Component( ComponentLevel7 ):
     except AttributeError:
       raise NotElaboratedError()
 
-    NamedObject._elaborate_stack = [ parent ]
+    top._dsl.elaborate_stack = [ parent ]
 
     # Check if we are adding obj to a list of to a component
     if not indices:
@@ -185,14 +163,13 @@ class Component( ComponentLevel7 ):
       obj._dsl._my_indices  = indices
 
       obj._dsl.elaborate_top = top
-      obj._dsl.NamedObject_fields = set()
+      top._dsl.elaborate_stack.append( obj )
 
-      NamedObject._elaborate_stack.append( obj )
       NamedObject.__setattr__ = NamedObject.__setattr_for_elaborate__
       obj._construct()
       del NamedObject.__setattr__
 
-      NamedObject._elaborate_stack.pop()
+      top._dsl.elaborate_stack.pop()
 
     added_components = obj._collect_all_single( lambda x: isinstance( x, Component ) )
 
@@ -252,7 +229,7 @@ class Component( ComponentLevel7 ):
     for func, obj_name in provided_func_calls:
       parent._dsl.func_calls[func].add( eval(obj_name) )
 
-    del NamedObject._elaborate_stack
+    del top._dsl.elaborate_stack
 
   def _delete_component( top, obj ):
 
@@ -289,7 +266,6 @@ class Component( ComponentLevel7 ):
       else:
         # Simply delete the attribute if it's merely a field
         delattr( parent, foo._dsl.my_name )
-        parent._dsl.NamedObject_fields.remove( foo._dsl.my_name )
 
       # Remove all components, signals, and method ports
       removed_components, removed_signals, removed_method_ports = \
@@ -454,62 +430,6 @@ class Component( ComponentLevel7 ):
       # pass
 
   #-----------------------------------------------------------------------
-  # Public APIs (can be called either before or after elaboration)
-  #-----------------------------------------------------------------------
-
-  """ Metadata APIs """
-
-  def set_metadata( s, key, value ):
-    """Set the metadata ``key`` of the given component to be ``value``.
-
-    Can be called before, during, or after elaboration.
-
-    Args:
-        key (MetadataKey): Key of the metadata.
-        value (object): The metadata. Can be any object.
-    """
-    key.check_value( value )
-    s._metadata[ key ] = value
-
-  def has_metadata( s, key ):
-    """Check if the component has metadata for ``key``.
-
-    Can be called before, during, or after elaboration.
-
-    Args:
-        key (MetadataKey): Key of the metadata.
-
-    Returns:
-        bool: Whether or not the component has the metadata for ``key``.
-
-    Raises:
-        TypeError: Raised if ``key`` is not an instance of :class:`MetadataKey`.
-    """
-    if not isinstance( key, MetadataKey ):
-      raise TypeError(f'the given object {key} is not a MetadataKey!')
-    return key in s._metadata
-
-  def get_metadata( s, key ):
-    """Get the metadata ``key`` of the given component.
-
-    Can be called before, during, or after elaboration.
-
-    Args:
-        key (MetadataKey): Key of the metadata.
-
-    Returns:
-        object: The metadata of the given ``key``.
-
-    Raises:
-        TypeError: Raised if ``key`` is not an instance of :class:`MetadataKey`.
-        UnsetMetadataError: Raised if the component does not have metadata for
-            the given ``key``.
-    """
-    if not s.has_metadata( key ):
-      raise UnsetMetadataError( key, s )
-    return s._metadata[ key ]
-
-  #-----------------------------------------------------------------------
   # Post-elaborate public APIs (can only be called after elaboration)
   #-----------------------------------------------------------------------
 
@@ -521,8 +441,6 @@ class Component( ComponentLevel7 ):
       pypyjit.set_param("off")
     except:
       pass
-    if not hasattr( s._dsl, "elaborate_top" ):
-      s.elaborate()
 
     assert type(pass_instance) is not type, f"Should pass in a pass instance like " \
                                             f"'{pass_instance.__name__}()' instead of '{pass_instance.__name__}'"
@@ -532,6 +450,84 @@ class Component( ComponentLevel7 ):
   def check( s ):
     s._check_valid_dsl_code()
 
+  # TODO maybe we should implement these two lock/unlock APIs as passes?
+  # They expose kernel implementation details though ...
+  def lock_in_simulation( s ):
+    s._check_called_at_elaborate_top( "lock_in_simulation" )
+
+    swapped_signals = defaultdict(list)
+
+    # Swap all Signal objects with actual data
+
+    Q = [ (s, s) ]
+    while Q:
+      current_obj, host = Q.pop()
+      if isinstance( current_obj, list ):
+        for i, obj in enumerate( current_obj ):
+          if isinstance( obj, Signal ):
+            try:
+              current_obj[i] = obj.default_value()
+            except Exception as e:
+              raise type(e)(str(e) + f' happens at {obj!r}')
+
+            try:
+              current_obj[i] <<= obj.default_value()
+            except Exception:
+              pass
+
+            swapped_signals[ host ].append( (current_obj, i, obj, True) )
+
+          elif isinstance( obj, Component ):
+            Q.append( (obj, obj) )
+          elif isinstance( obj, (Interface, list) ):
+            Q.append( (obj, host) )
+
+      elif isinstance( current_obj, NamedObject ):
+        for i, obj in current_obj.__dict__.items():
+          if i[0] != '_': # impossible to have tuple
+            if isinstance( obj, Signal ):
+              try:
+                value = obj.default_value()
+              except Exception as e:
+                raise type(e)(str(e) + f' happens at {obj!r}')
+
+              try:
+                value <<= obj.default_value()
+              except Exception:
+                pass
+
+              setattr( current_obj, i, value )
+
+              swapped_signals[ host ].append( (current_obj, i, obj, False) )
+
+            elif isinstance( obj, Component ):
+              Q.append( (obj, obj) )
+            elif isinstance( obj, (Interface, list) ):
+              Q.append( (obj, host) )
+
+    s._dsl.swapped_signals = swapped_signals
+    s._dsl.locked_simulation = True
+
+  def unlock_simulation( s ):
+    s._check_called_at_elaborate_top( "unlock_simulation" )
+    try:
+      assert s._dsl.locked_simulation
+    except:
+      raise AttributeError("Cannot unlock an unlocked/never locked model.")
+
+    swapped_values  = defaultdict(list)
+    for component, records in s._dsl.swapped_signals.items():
+      for current_obj, i, obj, is_list in records:
+        if is_list:
+          swapped_values[ component ].append( (current_obj, i, current_obj[i], is_list) )
+          current_obj[i] = obj
+        else:
+          swapped_values[ component ].append( (current_obj, i, getattr(current_obj, i), is_list) )
+          setattr( current_obj, i, obj )
+
+    s._dsl.swapped_values = swapped_values
+    s._dsl.locked_simulation = False
+
   """ APIs that provide local metadata of a component """
 
   def get_component_level( s ):
@@ -540,17 +536,17 @@ class Component( ComponentLevel7 ):
     except AttributeError:
       raise NotElaboratedError()
 
-  def get_child_components( s, sort_key = None ):
-    return s._collect_objects_local( lambda x: isinstance( x, Component ), sort_key )
+  def get_child_components( s ):
+    return s._collect_objects_local( lambda x: isinstance( x, Component ) )
 
-  def get_input_value_ports( s, sort_key = None ):
-    return s._collect_objects_local( lambda x: isinstance( x, InPort ), sort_key )
+  def get_input_value_ports( s ):
+    return s._collect_objects_local( lambda x: isinstance( x, InPort ) )
 
-  def get_output_value_ports( s , sort_key = None ):
-    return s._collect_objects_local( lambda x: isinstance( x, OutPort ), sort_key )
+  def get_output_value_ports( s ):
+    return s._collect_objects_local( lambda x: isinstance( x, OutPort ) )
 
-  def get_wires( s , sort_key = None ):
-    return s._collect_objects_local( lambda x: isinstance( x, Wire ), sort_key )
+  def get_wires( s ):
+    return s._collect_objects_local( lambda x: isinstance( x, Wire ) )
 
   def get_update_blocks( s ):
     assert s._dsl.constructed
@@ -588,9 +584,9 @@ class Component( ComponentLevel7 ):
     except AttributeError:
       return s._collect_all_single( filt )
 
-  def get_local_object_filter( s, filt, sort_key = None ):
+  def get_local_object_filter( s, filt ):
     assert callable( filt )
-    return s._collect_objects_local( filt, sort_key )
+    return s._collect_objects_local( filt )
 
   def get_all_components( s ):
     try:
@@ -610,13 +606,6 @@ class Component( ComponentLevel7 ):
     try:
       s._check_called_at_elaborate_top( "get_all_update_ff" )
       return s._dsl.all_update_ff
-    except AttributeError:
-      raise NotElaboratedError()
-
-  def get_all_update_once( s ):
-    try:
-      s._check_called_at_elaborate_top( "get_all_update_once" )
-      return s._dsl.all_update_once
     except AttributeError:
       raise NotElaboratedError()
 
@@ -723,113 +712,19 @@ class Component( ComponentLevel7 ):
     if check:
       top.check()
 
-  def add_value_port( top, parent, name, o ):
-    top._check_called_at_elaborate_top( "add_port" )
+  def add_connection( s, o1, o2 ):
+    try:
+      top = s._dsl.elaborate_top
+    except AttributeError:
+      raise NotElaboratedError()
 
-    assert isinstance( o, (InPort, OutPort) )
-    # If we are adding field parent.x, we simply reuse the setattr hook
-    assert not hasattr( parent, name ), f"Invalid add_value_port call: {parent} already has field {name}!"
+    try:
+      s._connect( o1, o2, internal=False )
+    except AssertionError as e:
+      raise InvalidConnectionError( "\n{}".format(e) )
 
-    NamedObject._elaborate_stack = [ parent ]
-    NamedObject.__setattr__ = NamedObject.__setattr_for_elaborate__
-    setattr( parent, name, o )
-    del NamedObject.__setattr__
-    del NamedObject._elaborate_stack
-
-    top._dsl.all_signals.add( o )
-    top._dsl.all_named_objects.add( o )
-
-  def add_connection( top, o1, o2 ):
-
-    # Currently only support connecting signals
-
-    top._check_called_at_elaborate_top( "add_connection" )
-    if isinstance( o2, Connectable ): o1, o2 = o2, o1
-
-    assert isinstance( o1, Connectable ), "Cannot connect two non-connectable objects"
-
-    assert isinstance( o1, Signal ), "Currently only support connecting signals/constants"
-
-    assert o1._dsl.elaborate_top is top
-
-    # Add the connection to the correct component
-    host1   = o1.get_host_component()
-    parent1 = host1.get_parent_object()
-
-    real_host = host1
-
-    if isinstance( o2, Signal ):
-      assert o2._dsl.elaborate_top is top
-
-      host2   = o2.get_host_component()
-      parent2 = host2.get_parent_object()
-
-      if isinstance( o1, InPort ):
-        if isinstance( o2, InPort ):
-          if host1 is parent2:
-            host1._connect_signal_signal( o1, o2 )
-          elif host2 is parent1:
-            host2._connect_signal_signal( o1, o2 )
-            real_host = host2
-          else:
-            assert False
-
-        # OutPort-Wire -> same host or wire is out's parent
-        elif isinstance( o2, Wire ):
-          assert host1 is host2 or host2 is parent1
-          host2._connect_signal_signal( o1, o2 )
-          real_host = host2
-
-        # InPort-OutPort: enforce same host. it doesn't make much sense
-        # to have outport in inport's parent
-        elif isinstance( o2, OutPort ):
-          assert host1 is host2
-          host1._connect_signal_signal( o1, o2 )
-
-        else:
-          assert False
-
-      elif isinstance( o1, OutPort ):
-        if isinstance( o2, OutPort ):
-          if host1 is parent2:
-            host1._connect_signal_signal( o1, o2 )
-          elif host2 is parent1:
-            host2._connect_signal_signal( o1, o2 )
-            real_host = host2
-          else:
-            assert False
-
-        # OutPort-InPort: enforce same host. it doesn't make much sense
-        # to have outport in inport's parent
-        elif isinstance( o2, InPort ):
-          assert host1 is host2
-          host1._connect_signal_signal( o1, o2 )
-
-        # OutPort-Wire -> same host or wire is out's parent
-        elif isinstance( o2, Wire ):
-          assert host1 is host2 or host2 is parent1
-          host2._connect_signal_signal( o1, o2 )
-          real_host = host2
-
-        else:
-          assert False
-
-      elif isinstance( o1, Wire ):
-        # Wire-Wire -> same host
-        if isinstance( o2, Wire ):
-          assert host1 is host2
-          host1._connect_signal_signal( o1, o2 )
-        # Wire-InPort/OutPort -> same host or wire is in/out's parent
-        else:
-          assert host1 is host2 or host1 is parent2
-          host1._connect_signal_signal( o1, o2 )
-
-      else:
-        assert False
-
-      top._dsl.all_adjacency[o1].add(o2)
-      top._dsl.all_adjacency[o2].add(o1)
-      top._dsl._has_pending_value_connections = True
+    for x, adjs in s._dsl.adjacency.items():
+      top._dsl.all_adjacency[x].update( adjs )
 
   def add_connections( s, *args ):
     try:

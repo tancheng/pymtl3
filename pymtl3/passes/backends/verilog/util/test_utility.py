@@ -4,19 +4,20 @@
 # Author : Peitian Pan
 # Date   : Jun 5, 2019
 """Provide utility methods for testing."""
+
 import copy
 from collections import deque
 
-from hypothesis import strategies as st
+import hypothesis.strategies as st
 
 from pymtl3.datatypes import Bits1, mk_bits
 from pymtl3.dsl import OutPort
 from pymtl3.passes.rtlir import RTLIRDataType as rdt
 from pymtl3.passes.rtlir import RTLIRType as rt
-from pymtl3.stdlib.test_utils import TestVectorSimulator
+from pymtl3.stdlib.test import TestVectorSimulator
 
-from ...yosys import YosysTranslationImportPass
-from .. import VerilogTranslationImportPass
+from ...yosys import TranslationImportPass as YosysTransImportPass
+from .. import TranslationImportPass as VTransImportPass
 
 #=========================================================================
 # test utility functions
@@ -203,7 +204,7 @@ def DataStrategy( draw, dut ):
 
   ret = []
   dut.elaborate()
-  rifc = rt.RTLIRGetter(cache=False).get_component_ifc_rtlir( dut )
+  rifc = rt.get_component_ifc_rtlir( dut )
   ports = rifc.get_ports_packed()
   ifcs = rifc.get_ifc_views_packed()
 
@@ -289,7 +290,7 @@ def closed_loop_component_input_test( dut, test_vector, tv_in, backend = "verilo
   def ref_tv_out( model, test_vector ):
     dct = {}
     for out_port in all_output_ports:
-      dct[ out_port ] = eval( "model." + out_port._dsl.my_name ).clone() # WE NEED TO CLONE NOW
+      dct[ out_port ] = eval( "model." + out_port._dsl.my_name )
     reference_output.append( dct )
 
   # Method to compare the outputs of the imported model and the pure python one
@@ -307,18 +308,26 @@ def closed_loop_component_input_test( dut, test_vector, tv_in, backend = "verilo
   reference_sim.run_test()
   dut.unlock_simulation()
 
-  # If it simulates correctly, translate it and import it back
-  dut.elaborate()
-  if backend == "verilog":
-    dut.set_metadata( VerilogTranslationImportPass.enable, True )
-    imported_obj = VerilogTranslationImportPass()( dut )
-  elif backend == "yosys":
-    dut.set_metadata( YosysTranslationImportPass.enable, True )
-    imported_obj = YosysTranslationImportPass()( dut )
-
-  # Run another vector simulator spin
-  imported_sim = TestVectorSimulator( imported_obj, test_vector, tv_in, tv_out )
-  imported_sim.run_test()
+  try:
+    # If it simulates correctly, translate it and import it back
+    dut.elaborate()
+    if backend == "verilog":
+      dut.verilog_translate_import = True
+      imported_obj = VTransImportPass()( dut )
+    elif backend == "yosys":
+      dut.yosys_translate_import = True
+      imported_obj = YosysTransImportPass()( dut )
+    # Run another vector simulator spin
+    imported_sim = TestVectorSimulator( imported_obj, test_vector, tv_in, tv_out )
+    imported_sim.run_test()
+  finally:
+    try:
+      # Explicitly finalize the imported object because the shared lib may have
+      # name collison
+      imported_obj.finalize()
+    except UnboundLocalError:
+      # This test fails before the object is imported back
+      pass
 
 #-------------------------------------------------------------------------
 # closed_loop_component_test
@@ -337,7 +346,7 @@ def closed_loop_component_test( dut, data, backend = "verilog" ):
       # `setattr` fails to set the correct value of an array if indexed by
       # a subscript. We use `exec` here to make sure the value of elements
       # are assigned correctly.
-      exec( "model." + name + " @= data" )
+      exec( "model." + name + " = data" )
   test_vector = data.draw( DataStrategy( dut ) )
   closed_loop_component_input_test( dut, test_vector, tv_in, backend )
 

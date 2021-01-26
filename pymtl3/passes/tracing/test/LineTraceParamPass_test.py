@@ -31,5 +31,6 @@ def test_multi_level_trace():
   A.set_param( 'top.line_trace', level='verbose' )
   A.elaborate()
   A.apply( LineTraceParamPass()      )
+  A.lock_in_simulation()
   print( A.line_trace() )
   assert A.line_trace() == "verbose"

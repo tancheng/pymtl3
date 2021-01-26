@@ -5,16 +5,15 @@
 
 from textwrap import dedent
 
+from pymtl3 import Placeholder
 from pymtl3.passes.backends.generic.structural.StructuralTranslatorL4 import (
     StructuralTranslatorL4,
 )
 from pymtl3.passes.rtlir import RTLIRDataType as rdt
-from pymtl3.passes.rtlir import RTLIRGetter
 from pymtl3.passes.rtlir import RTLIRType as rt
-from pymtl3.passes.rtlir.RTLIRPass import RTLIRPass
+from pymtl3.passes.rtlir import get_component_ifc_rtlir
 
 from ...util.utility import make_indent, pretty_concat
-from ...VerilogPlaceholder import VerilogPlaceholder
 from .VStructuralTranslatorL3 import VStructuralTranslatorL3
 
 
@@ -30,20 +29,11 @@ class VStructuralTranslatorL4(
 
   def rtlir_tr_subcomp_port_decl( s, m, c_id, c_rtype, c_array_type, port_id,
       port_rtype, port_dtype, port_array_type ):
-    obj = c_rtype.obj
-    if obj.has_metadata(s._placeholder_pass.placeholder_config):
-      pmap = obj.get_metadata(s._placeholder_pass.placeholder_config).get_port_map()
-    else:
-      pmap= lambda x: x
-    direction = port_rtype.get_direction()
-    if direction == 'input':
-      direction += ' '
     return {
-        'direction' : direction,
+        'direction' : port_rtype.get_direction(),
         'data_type' : port_dtype['data_type'],
         'packed_type' : port_dtype['packed_type'],
         'id' : port_id,
-        'ph_id' : pmap(port_id),
         'unpacked_type' : port_array_type['unpacked_type'],
     }
 
@@ -53,24 +43,12 @@ class VStructuralTranslatorL4(
   def rtlir_tr_subcomp_ifc_port_decl( s, m, c_id, c_rtype, c_array_type,
       ifc_id, ifc_rtype, ifc_array_type, port_id, port_rtype, port_array_type ):
     if isinstance( port_rtype, rt.Port ):
-      obj = c_rtype.obj
-      if obj.has_metadata(s._placeholder_pass.placeholder_config):
-        pmap = obj.get_metadata(s._placeholder_pass.placeholder_config).get_port_map()
-      else:
-        pmap = lambda x: x
-      vname = f'{ifc_id}__{port_id}'
-      pyname = vname.replace('__', '.')
-      ph_id = vname if pmap(pyname) == pyname else pmap(pyname)
       port_dtype = s.rtlir_data_type_translation( m, port_rtype.get_dtype() )
-      direction = port_rtype.get_direction()
-      if direction == 'input':
-        direction += ' '
       return [{
-          'direction' : direction,
+          'direction' : port_rtype.get_direction(),
           'data_type' : port_dtype['data_type'],
           'packed_type' : port_dtype['packed_type'],
-          'id' : vname,
-          'ph_id' : ph_id,
+          'id' : f'{ifc_id}__{port_id}',
           'unpacked_type' : ifc_array_type['unpacked_type']+port_array_type['unpacked_type'],
       }]
     else:
@@ -85,19 +63,8 @@ class VStructuralTranslatorL4(
           _port_array_rtype = None
           _port_rtype = _port_rtype
 
-        # Combine the array_type of two interfaces into one
-        combined_ifc_array_type = {
-            'def' : port_array_type['def'],
-            'unpacked_type' : ifc_array_type['unpacked_type'] + port_array_type['unpacked_type'],
-            'n_dim' : ifc_array_type['n_dim'] + port_array_type['n_dim'],
-        }
-
-        ret += s.rtlir_tr_subcomp_ifc_port_decl( m,
-                  # Component: nested interface does not change the component
-                  c_id, c_rtype, c_array_type,
-                  # Interface: nested interface appends its id and array_type
-                  f'{ifc_id}__{port_id}', port_rtype, combined_ifc_array_type,
-                  # Port: use the id, rtype, and array_type of the port
+        ret += s.rtlir_tr_subcomp_ifc_port_decl( m, c_id, c_rtype, c_array_type,
+                  f'{ifc_id}__{port_id}', port_rtype, port_array_type,
                   _port_id, _port_rtype, s.rtlir_tr_unpacked_array_type(_port_array_rtype))
       return ret
 
@@ -136,11 +103,11 @@ class VStructuralTranslatorL4(
         attr = c_id + ''.join(f'[{dim}]' for dim in _n_dim)
         obj = eval(f'm.{attr}')
         # Get the translated component name
-        obj_c_rtype = s.tr_top.get_metadata(RTLIRPass.rtlir_getter).get_rtlir(obj)
+        obj_c_rtype = get_component_ifc_rtlir(obj)
         _c_name = s.rtlir_tr_component_unique_name(obj_c_rtype)
 
-        if isinstance(obj, VerilogPlaceholder):
-          c_name = obj.get_metadata( s._placeholder_pass.placeholder_config ).pickled_top_module
+        if isinstance(obj, Placeholder):
+          c_name = obj.config_placeholder.pickled_top_module
         else:
           c_name = _c_name
 
@@ -157,16 +124,15 @@ class VStructuralTranslatorL4(
         for i, dscp in enumerate(port_conns + ifc_conns):
           comma = ',\n' if i != len(port_conns+ifc_conns)-1 else ''
           port_name = dscp['id']
-          ph_port_name = dscp['ph_id']
           port_wire = f"{orig_c_id}__{dscp['id']}{unpacked_str}"
           if (port_name == 'clk' and no_clk) or (port_name == 'reset' and no_reset):
             comma = ',\n' if i != len(port_conns+ifc_conns)-1 else '\n'
             newline = '\n' if i != len(port_conns+ifc_conns)-1 else ''
             port_conn_decls.append("`ifndef SYNTHESIS\n")
-            port_conn_decls.append(f".{ph_port_name}( {port_wire} ){comma}")
+            port_conn_decls.append(f".{port_name}( {port_wire} ){comma}")
             port_conn_decls.append(f"`endif{newline}")
           else:
-            port_conn_decls.append(f".{ph_port_name}( {port_wire} ){comma}")
+            port_conn_decls.append(f".{port_name}( {port_wire} ){comma}")
 
         make_indent( port_conn_decls, 2 )
         port_conn_decls = ''.join(port_conn_decls)
@@ -182,11 +148,9 @@ class VStructuralTranslatorL4(
 
     # Generate wire declarations for all ports
     defs = []
-
     for dscp in port_conns + ifc_conns:
       defs.append(pretty_concat(dscp['data_type'], dscp['packed_type'],
         f"{c_id}__{dscp['id']}", f"{c_array_type['unpacked_type']}{dscp['unpacked_type']}", ';'))
-
     make_indent( defs, 1 )
     defs = ['\n'.join(defs)]
 

@@ -22,9 +22,7 @@ from ....testcases import (
     CaseBits64PartSelUpblkComp,
     CaseBits64SextInComp,
     CaseBits64ZextInComp,
-    CaseDefaultBitsComp,
     CasePassThroughComp,
-    CasePythonClassAttr,
     CaseSequentialPassThroughComp,
     CaseVerilogReservedComp,
 )
@@ -33,11 +31,11 @@ from ..YosysBehavioralTranslatorL1 import YosysBehavioralRTLIRToVVisitorL1
 
 def run_test( case, m ):
   m.elaborate()
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
 
   visitor = YosysBehavioralRTLIRToVVisitorL1(lambda x: x in verilog_reserved)
-  upblks = m.get_metadata( BehavioralRTLIRGenPass.rtlir_upblks )
+  upblks = m._pass_behavioral_rtlir_gen.rtlir_upblks
   m_all_upblks = m.get_update_blocks()
   assert len(m_all_upblks) == 1
 
@@ -59,8 +57,6 @@ def run_test( case, m ):
       CaseBits32x2ConcatUnpackedSignalComp,
       CaseBits32BitSelUpblkComp,
       CaseBits64PartSelUpblkComp,
-      CasePythonClassAttr,
-      CaseDefaultBitsComp,
     ]
 )
 def test_yosys_behavioral_L1( case ):

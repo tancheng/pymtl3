@@ -9,8 +9,8 @@
 from pymtl3.datatypes import Bits32
 from pymtl3.dsl import *
 from pymtl3.dsl.errors import UpblkCyclicError
+from pymtl3.passes import TracingConfigs
 from pymtl3.passes.sim.GenDAGPass import GenDAGPass
-from pymtl3.passes.tracing.PrintTextWavePass import PrintTextWavePass
 
 from ..OpenLoopCLPass import OpenLoopCLPass
 
@@ -27,21 +27,21 @@ def test_top_level_method_tracing():
 
       s.value = Wire(Bits32)
 
-      @update_ff
+      @s.update_ff
       def up_incr():
         s.count <<= s.count + 1
 
-      @update
+      @s.update
       def up_amp():
-        s.amp @= s.count * 100
+        s.amp = s.count * 100
 
-      @update
+      @s.update
       def up_compose_in():
         if s.element:
-          s.value @= s.amp + s.element
+          s.value = s.amp + s.element
           s.element = None
         else:
-          s.value @= Bits32( -1 )
+          s.value = Bits32( -1 )
 
       s.add_constraints(
         M( s.push ) < U( up_compose_in ),
@@ -67,10 +67,11 @@ def test_top_level_method_tracing():
   A.elaborate()
 
   # Turn on textwave
-  A.set_metadata( PrintTextWavePass.enable, True )
+  A.config_tracing = TracingConfigs( tracing='text_fancy' )
 
   A.apply( GenDAGPass() )
   A.apply( OpenLoopCLPass() )
+  A.lock_in_simulation()
 
   print("- push!")
   A.push(7)
@@ -87,7 +88,7 @@ def test_top_level_method_tracing():
   print("- pull!")
   print(A.pull())
 
-  print("num_cycles_executed: ", A.sim_cycle_count())
+  print("num_cycles_executed: ", A.num_cycles_executed)
   A.print_textwave()
 
 class TestModuleNonBlockingIfc(Component):
@@ -100,24 +101,21 @@ class TestModuleNonBlockingIfc(Component):
 
     s.value = Wire(Bits32)
 
-    @update_ff
+    @s.update_ff
     def up_incr():
-      if s.reset:
-        s.count <<= 0
-      else:
-        s.count <<= s.count + 1
+      s.count <<= s.count + 1
 
-    @update
+    @s.update
     def up_amp():
-      s.amp @= s.count * 100
+      s.amp = s.count * 100
 
-    @update
+    @s.update
     def up_compose_in():
       if s.element:
-        s.value @= s.amp + s.element
+        s.value = s.amp + s.element
         s.element = None
       else:
-        s.value @= -1
+        s.value = -1
 
     s.add_constraints(
       M( s.push ) < U( up_compose_in ),
@@ -129,7 +127,7 @@ class TestModuleNonBlockingIfc(Component):
     assert s.element is None and s.count % 5 == 4
     s.element = ele
 
-  @non_blocking( lambda s: s.value != Bits32(-1) )
+  @non_blocking( lambda s: s.value >= 0 )
   def pull( s ):
     return s.value
 
@@ -145,7 +143,7 @@ def _test_TestModuleNonBlockingIfc( cls ):
   A.elaborate()
   A.apply( GenDAGPass() )
   A.apply( OpenLoopCLPass() )
-  A.sim_reset()
+  A.lock_in_simulation()
 
   rdy = A.push.rdy()
   print("- push_rdy?", rdy )
@@ -201,11 +199,11 @@ def _test_TestModuleNonBlockingIfc( cls ):
 
   assert not A.pull.rdy()
 
-  return A.sim_cycle_count()
+  return A.num_cycles_executed
 
 def test_top_level_non_blocking_ifc():
   num_cycles = _test_TestModuleNonBlockingIfc( TestModuleNonBlockingIfc )
-  assert num_cycles == 3 + 10 # regression
+  assert num_cycles == 10 # regression
 
 def test_top_level_non_blocking_ifc_in_deep_net():
 
@@ -213,10 +211,7 @@ def test_top_level_non_blocking_ifc_in_deep_net():
     def construct( s ):
       s.push = CalleeIfcCL()
       s.pull = CalleeIfcCL()
-      s.inner = Top_less_less_inner()
-      s.inner.push //= s.push
-      s.inner.pull //= s.pull
-
+      s.inner = Top_less_less_inner()( push = s.push, pull = s.pull )
     def line_trace( s ):
       return s.inner.line_trace()
 
@@ -227,9 +222,7 @@ def test_top_level_non_blocking_ifc_in_deep_net():
     def construct( s ):
       s.push = CalleeIfcCL()
       s.pull = CalleeIfcCL()
-      s.inner = Top_less_inner()
-      s.inner.push //= s.push
-      s.inner.pull //= s.pull
+      s.inner = Top_less_inner()( push = s.push, pull = s.pull )
     def line_trace( s ):
       return s.inner.line_trace()
 
@@ -240,9 +233,7 @@ def test_top_level_non_blocking_ifc_in_deep_net():
     def construct( s ):
       s.push = CalleeIfcCL()
       s.pull = CalleeIfcCL()
-      s.inner = TestModuleNonBlockingIfc()
-      s.inner.push //= s.push
-      s.inner.pull //= s.pull
+      s.inner = TestModuleNonBlockingIfc()( push = s.push, pull = s.pull )
 
     def line_trace( s ):
       return s.inner.line_trace()
@@ -251,7 +242,7 @@ def test_top_level_non_blocking_ifc_in_deep_net():
       return True
 
   num_cycles = _test_TestModuleNonBlockingIfc( Top )
-  assert num_cycles == 3 + 10 # regression
+  assert num_cycles == 10 # regression
 
 class PassThroughPlus100( Component ):
 
@@ -273,11 +264,8 @@ def test_pass_through_equal_m_constraint():
     def construct( s ):
       s.push = CalleeIfcCL()
       s.pull = CalleeIfcCL()
-      s.pass1 = PassThroughPlus100()
-      s.pass1.push //= s.push
-      s.inner = TestModuleNonBlockingIfc()
-      s.inner.push //= s.pass1.real_push
-      s.inner.pull //= s.pull
+      s.pass1 = PassThroughPlus100()( push = s.push )
+      s.inner = TestModuleNonBlockingIfc()( push = s.pass1.real_push, pull = s.pull )
 
     def line_trace( s ):
       return s.inner.line_trace()
@@ -286,7 +274,7 @@ def test_pass_through_equal_m_constraint():
       return True
 
   num_cycles = _test_TestModuleNonBlockingIfc( Top )
-  assert num_cycles == 3+10 # regression
+  assert num_cycles == 10 # regression
 
 
 def test_deep_pass_through_equal_m_constraint():
@@ -298,11 +286,13 @@ def test_deep_pass_through_equal_m_constraint():
       s.through = [ PassThroughPlus100() for _ in range(10) ]
       for i in range(10):
         connect( s.through[i].push, s.push if i == 0 else \
-                                      s.through[i-1].real_push )
+                                      s.through[i-1].real_push,
+        )
 
-      s.inner = TestModuleNonBlockingIfc()
-      s.inner.push //= s.through[-1].real_push
-      s.inner.pull //= s.pull
+      s.inner = TestModuleNonBlockingIfc()(
+        push = s.through[-1].real_push,
+        pull = s.pull,
+      )
 
     def line_trace( s ):
       return "push's line trace:" + str(s.push)
@@ -311,4 +301,4 @@ def test_deep_pass_through_equal_m_constraint():
       return True
 
   num_cycles = _test_TestModuleNonBlockingIfc( Top )
-  assert num_cycles == 3 + 10 # regression
+  assert num_cycles == 10 # regression

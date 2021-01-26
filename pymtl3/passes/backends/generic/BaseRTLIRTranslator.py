@@ -20,7 +20,7 @@ class BaseRTLIRTranslator:
 
   def gen_base_rtlir_trans_metadata( s, m ):
     s.component[m] = TranslatorMetadata()
-    for child in m.get_child_components(repr):
+    for child in m.get_child_components():
       s.gen_base_rtlir_trans_metadata( child )
 
 #-------------------------------------------------------------------------

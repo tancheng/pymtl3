@@ -11,9 +11,9 @@ from greenlet import greenlet
 
 from pymtl3 import *
 from pymtl3.stdlib.connects import connect_pairs
+from pymtl3.stdlib.rtl.queues import BypassQueueRTL, NormalQueueRTL
 
-from .master_minion_ifcs import MasterIfcCL, MasterIfcRTL, MinionIfcCL, MinionIfcRTL
-from .send_recv_ifcs import RecvCL2SendRTL, RecvIfcRTL, RecvRTL2SendCL, SendIfcRTL
+from .SendRecvIfc import RecvCL2SendRTL, RecvIfcRTL, RecvRTL2SendCL, SendIfcRTL
 from .XcelMsg import XcelMsgType, mk_xcel_msg
 
 #-------------------------------------------------------------------------
@@ -125,9 +125,27 @@ class XcelMinionIfcFL( Interface ):
 # to connect by name and leverage the custom connect method of the nested
 # Send/RecvIfc. The CL-FL and FL-CL has been implemented in the FL ifc.
 
-class XcelMasterIfcCL( MasterIfcCL ): pass
+class XcelMasterIfcCL( Interface ):
 
-class XcelMinionIfcCL( MinionIfcCL ): pass
+  def construct( s, ReqType, RespType, resp=None, resp_rdy=None ):
+    s.ReqType  = ReqType
+    s.RespType = RespType
+    s.req  = CallerIfcCL( Type=ReqType )
+    s.resp = CalleeIfcCL( Type=RespType, method=resp, rdy=resp_rdy )
+
+  def __str__( s ):
+    return "{},{}".format( s.req, s.resp )
+
+class XcelMinionIfcCL( Interface ):
+
+  def construct( s, ReqType, RespType, req=None, req_rdy=None ):
+    s.ReqType  = ReqType
+    s.RespType = RespType
+    s.req  = CalleeIfcCL( Type=ReqType, method=req, rdy=req_rdy )
+    s.resp = CallerIfcCL( Type=RespType )
+
+  def __str__( s ):
+    return "{},{}".format( s.req, s.resp )
 
 #-------------------------------------------------------------------------
 # RTL interfaces
@@ -137,9 +155,26 @@ class XcelMinionIfcCL( MinionIfcCL ): pass
 # to connect by name and leverage the custom connect method of the nested
 # Send/RecvIfc. The RTL-FL and FL-RTL has been implemented in the FL ifc.
 
-class XcelMasterIfcRTL( MasterIfcRTL ): pass
+class XcelMasterIfcRTL( Interface ):
 
-class XcelMinionIfcRTL( MinionIfcRTL ): pass
+  def construct( s, ReqType, RespType ):
+    s.ReqType  = ReqType
+    s.RespType = RespType
+    s.req  = SendIfcRTL( ReqType  )
+    s.resp = RecvIfcRTL( RespType )
+
+  def __str__( s ):
+    return "{},{}".format( s.req, s.resp )
+
+class XcelMinionIfcRTL( Interface ):
+  def construct( s, ReqType, RespType ):
+    s.ReqType  = ReqType
+    s.RespType = RespType
+    s.req  = RecvIfcRTL( ReqType  )
+    s.resp = SendIfcRTL( RespType )
+
+  def __str__( s ):
+    return "{},{}".format( s.req, s.resp )
 
 #-------------------------------------------------------------------------
 # CL/FL adapters
@@ -159,7 +194,7 @@ class XcelIfcCL2FLAdapter( Component ):
     s.right = XcelMasterIfcFL()
     s.entry = None
 
-    @update_once
+    @s.update
     def up_xcelifc_cl_fl_blk():
 
       if s.entry is not None and s.left.resp.rdy():
@@ -237,8 +272,6 @@ class XcelIfcFL2CLAdapter( Component ):
 #-------------------------------------------------------------------------
 # RTL/FL adapters
 #-------------------------------------------------------------------------
-# Yanghui: directly adapting FL/RTL is tricky. I first convert FL/CL
-# then CL/RTL using the adapters we already have.
 
 class XcelIfcRTL2FLAdapter( Component ):
 
@@ -246,18 +279,32 @@ class XcelIfcRTL2FLAdapter( Component ):
     s.left  = XcelMinionIfcRTL( ReqType, RespType )
     s.right = XcelMasterIfcFL()
 
-    s.req_rtl2cl = RecvRTL2SendCL( ReqType )
-    s.resp_cl2rtl  = RecvCL2SendRTL( RespType )
-    s.cl2fl = XcelIfcCL2FLAdapter( ReqType, RespType )
+    s.req_q = NormalQueueRTL( ReqType, num_entries=1 )
+    connect( s.left.req, s.req_q.enq )
 
-    s.left.req //= s.req_rtl2cl.recv
-    s.req_rtl2cl.send //= s.cl2fl.left.req
+    @s.update
+    def up_xcelifc_rtl_fl_blk():
 
-    s.cl2fl.right //= s.right
+      if s.req_q.deq.rdy and s.left.resp.rdy:
 
-    s.cl2fl.left.resp //= s.resp_cl2rtl.recv
-    s.left.resp //= s.resp_cl2rtl.send
+        if s.req_q.deq.ret.type_ == XcelMsgType.READ:
+          resp = RespType( s.req_q.deq.ret.type_,
+                           s.right.read( s.req_q.deq.ret.addr ) )
 
+        elif s.req_q.deq.ret.type_ == XcelMsgType.WRITE:
+          s.right.write( s.req_q.deq.ret.addr, s.req_q.deq.ret.data )
+          resp = RespType( s.req_q.deq.ret.type_, 0 )
+
+        s.req_q.deq.en = b1(1)
+        s.left.resp.en  = b1(1)
+        s.left.resp.msg = resp
+
+      else:
+        s.req_q.deq.en = b1(0)
+        s.left.resp.en  = b1(0)
+
+# Yanghui: directly adapting FL to RTL is tricky. I first convert FL to CL
+# then CL to RTL using the adapters we already have.
 class XcelIfcFL2RTLAdapter( Component ):
 
   def construct( s, ReqType, RespType ):

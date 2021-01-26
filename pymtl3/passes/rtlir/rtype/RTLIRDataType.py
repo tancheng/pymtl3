@@ -11,13 +11,12 @@ is a data type object or simply a data type. RTLIR instance type Signal
 can be parameterized by the generated type objects.
 """
 from functools import reduce
-from hashlib import blake2b
-from math import ceil, log2
 
-from pymtl3 import dsl
+import pymtl3.dsl as dsl
 from pymtl3.datatypes import Bits, is_bitstruct_class, is_bitstruct_inst
 
 from ..errors import RTLIRConversionError
+from ..util.utility import collect_objs
 
 
 class BaseRTLIRDataType:
@@ -30,28 +29,12 @@ class BaseRTLIRDataType:
 
 class Vector( BaseRTLIRDataType ):
   """RTLIR data type class for vector type."""
-  def __init__( s, nbits, is_explicit = True ):
+  def __init__( s, nbits ):
     assert nbits > 0, 'vector bitwidth should be a positive integer!'
     s.nbits = nbits
-    s._is_explicit = is_explicit
-
-  def get_name( s ):
-    return s.get_full_name()
-
-  def get_full_name( s ):
-    return str(int(s.nbits))
 
   def get_length( s ):
-    return int(s.nbits)
-
-  def get_index_width( s ):
-    if s.nbits <= 1:
-      return 1
-    else:
-      return ceil(log2(s.nbits))
-
-  def is_explicit( s ):
-    return s._is_explicit
+    return s.nbits
 
   def __eq__( s, other ):
     return (isinstance(other, Vector) and s.nbits == other.nbits) or \
@@ -69,13 +52,13 @@ class Vector( BaseRTLIRDataType ):
 
 class Struct( BaseRTLIRDataType ):
   """RTLIR data type class for struct type."""
-  def __init__( s, cls, properties ):
-    s.cls = cls
+  def __init__( s, name, properties, cls = None ):
     # As of Python 3.7, dict always preserves insertion order
     assert len(properties) > 0, 'struct has no fields!'
+    s.name = name
     s.properties = properties
-
-    # if cls is not None:
+    s.cls = cls
+    if cls is not None:
       # try:
       #   file_name = inspect.getsourcefile( cls )
       #   s.file_info = f"{file_name}"
@@ -84,51 +67,27 @@ class Struct( BaseRTLIRDataType ):
       # except OSError:
       # With the current way of generating BitStructs it is no
       # longer possible to report the file in which it was generated.
-      # s.file_info = f"BitStruct {cls.__name__}"
-    # else:
-      # s.file_info = "Not available"
+      s.file_info = f"BitStruct {cls.__name__}"
+    else:
+      s.file_info = "Not available"
 
   def __eq__( s, u ):
-    return isinstance(u, Struct) and s.get_full_name() == u.get_full_name()
+    return isinstance(u, Struct) and s.name == u.name
 
   def __hash__( s ):
-    return hash((type(s), s.get_full_name()))
-
-  def get_field_str( s ):
-    try:
-      return s._field_str
-    except AttributeError:
-      s._field_str = '__'.join(f'{field_name}_{field_type.get_full_name()}' \
-                      for field_name, field_type in s.properties.items())
-      return s._field_str
-
-  def get_full_name( s ):
-    try:
-      return s._full_name
-    except AttributeError:
-      # Derive the name of BitStruct from both the class name and its fields
-      s._full_name = f'{s.cls.__name__}__{s.get_field_str()}'
-      return s._full_name
+    return hash((type(s), s.name))
 
   def get_name( s ):
-    full_name = s.get_full_name()
-    if len(full_name) < 64:
-      return full_name
-    param_hash = blake2b(digest_size = 8)
-    param_hash.update(s.get_field_str().encode('ascii'))
-    return f'{s.cls.__name__}__{param_hash.hexdigest()}'
+    return s.name
 
-  # def get_file_info( s ):
-    # return s.file_info
+  def get_file_info( s ):
+    return s.file_info
 
   def get_class( s ):
     return s.cls
 
   def get_length( s ):
-    return int(sum( d.get_length() for d in s.properties.values() ))
-
-  def get_index_width( s ):
-    assert False, 'rdt.Struct cannot be indexed!'
+    return sum( d.get_length() for d in s.properties.values() )
 
   def has_property( s, p ):
     return p in s.properties
@@ -144,7 +103,7 @@ class Struct( BaseRTLIRDataType ):
     return s == obj
 
   def __str__( s ):
-    return f'Struct {s.get_name()}'
+    return f'Struct {s.name}'
 
 class Bool( BaseRTLIRDataType ):
   """RTLIR data type class for struct type.
@@ -161,9 +120,6 @@ class Bool( BaseRTLIRDataType ):
 
   def get_length( s ):
     return 1
-
-  def get_index_width( s ):
-    assert False, 'rdt.Bool cannot be indexed!'
 
   def __call__( s, obj ):
     """Return if obj be cast into type `s`."""
@@ -195,15 +151,8 @@ class PackedArray( BaseRTLIRDataType ):
   def __hash__( s ):
     return hash((type(s), tuple(s.dim_sizes), s.sub_dtype))
 
-  def get_name( s ):
-    return s.get_full_name()
-
-  def get_full_name( s ):
-    dimension_str = 'x'.join(str(d) for d in s.dim_sizes)
-    return f'{s.sub_dtype.get_full_name()}x{dimension_str}'
-
   def get_length( s ):
-    return int(s.sub_dtype.get_length()*reduce( lambda p,x: p*x, s.dim_sizes, 1 ))
+    return s.sub_dtype.get_length()*reduce( lambda p,x: p*x, s.dim_sizes, 1 )
 
   def get_next_dim_type( s ):
     if len( s.dim_sizes ) == 1:
@@ -212,14 +161,6 @@ class PackedArray( BaseRTLIRDataType ):
 
   def get_dim_sizes( s ):
     return s.dim_sizes
-
-  def get_index_width( s ):
-    assert s.dim_sizes, 'rdt.PackedArray is created without dimension!'
-    n_elements = s.dim_sizes[0]
-    if n_elements <= 1:
-      return 1
-    else:
-      return ceil(log2(n_elements))
 
   def get_sub_dtype( s ):
     return s.sub_dtype
@@ -257,7 +198,7 @@ def _get_rtlir_dtype_struct( obj ):
     properties = { name: _get_rtlir_dtype_struct( getattr(obj, name) )
                     for name in cls.__bitstruct_fields__.keys() }
 
-    return Struct( cls, properties )
+    return Struct(cls.__name__, properties, cls)
 
   else:
     assert False, str(obj) + ' is not allowed as a field of struct!'
@@ -279,7 +220,7 @@ def get_rtlir_dtype( obj ):
 
       # python int object
       elif Type is int:
-        return Vector( _get_nbits_from_value( obj ), False )
+        return Vector( 32 )
 
       # Struct data type
       elif is_bitstruct_class( Type ):
@@ -295,7 +236,9 @@ def get_rtlir_dtype( obj ):
 
     # Python integer objects
     elif isinstance( obj, int ):
-      return Vector( _get_nbits_from_value( obj ), False )
+      # Following the Verilog bitwidth rule: number literals have 32 bit width
+      # by default.
+      return Vector( 32 )
 
     # PyMTL Bits objects
     elif isinstance( obj, Bits ):
@@ -310,11 +253,3 @@ def get_rtlir_dtype( obj ):
   except AssertionError as e:
     msg = '' if e.args[0] is None else e.args[0]
     raise RTLIRConversionError( obj, msg )
-
-def _get_nbits_from_value( value ):
-  if -1 <= value <= 1:
-    return 1
-  if value < 0:
-    return ceil(log2(abs(value)))
-  else:
-    return ceil(log2(value+1))

@@ -7,17 +7,12 @@ Author : Shunning Jiang
 Date   : Aug 23, 2018
 """
 from pymtl3.datatypes import Bits2, Bits4, Bits14, Bits16, Bits24, Bits32
-from pymtl3.dsl.ComponentLevel1 import update
 from pymtl3.dsl.ComponentLevel3 import ComponentLevel3, connect
 from pymtl3.dsl.Connectable import Wire
 from pymtl3.dsl.errors import MultiWriterError, NoWriterError
 
 from .sim_utils import simple_sim_pass
 
-# Shunning: Note that we now have @= as a hook for LHS, we can safely
-# assigning constants
-# >>> s.A[0:16] @= 0xff
-# instead of s.A[0:16] @= Bits16( 0xff )
 
 def _test_model( cls ):
   A = cls()
@@ -34,15 +29,15 @@ def test_write_two_disjoint_slices():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_0_16():
-        s.A[0:16] @= Bits16( 0xff )
+        s.A[0:16] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_wr_16_30():
-        s.A[16:30] @= Bits14( 0xff )
+        s.A[16:30] = Bits14( 0xff )
 
-      @update
+      @s.update
       def up_rd_12_30():
         assert s.A[12:30] == 0xff0
 
@@ -55,15 +50,15 @@ def test_write_two_disjoint_slices_no_reader():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_0_16():
-        s.A[0:16] @= Bits16( 0xff )
+        s.A[0:16] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_wr_16_30():
-        s.A[16:30] @= Bits14( 0xff )
+        s.A[16:30] = Bits14( 0xff )
 
-      @update
+      @s.update
       def up_rd_17_30():
         assert s.A[16:30] == 0xff
 
@@ -85,15 +80,15 @@ def test_write_two_overlapping_slices():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_0_24():
-        s.A[0:24] @= Bits24( 0xff )
+        s.A[0:24] = Bits24( 0xff )
 
-      @update
+      @s.update
       def up_wr_8_32():
-        s.A[8:32] @= Bits24( 0xff )
+        s.A[8:32] = Bits24( 0xff )
 
-      @update
+      @s.update
       def up_rd_A():
         x = s.A
 
@@ -111,19 +106,19 @@ def test_write_two_slices_and_bit():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_0_16():
-        s.A[0:16] @= 0xff
+        s.A[0:16] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_wr_16_30():
-        s.A[16:30] @= Bits14( 0xff )
+        s.A[16:30] = Bits14( 0xff )
 
-      @update
+      @s.update
       def up_wr_30_31():
-        s.A[30] @= 1
+        s.A[30] = Bits1( 1 )
 
-      @update
+      @s.update
       def up_rd_A():
         print(s.A[0:17])
 
@@ -146,15 +141,15 @@ def test_write_slices_and_bit_overlapped():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_0_16():
-        s.A[0:16] @= 0xff
+        s.A[0:16] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_wr_15():
-        s.A[15] @= 1
+        s.A[15] = Bits1( 1 )
 
-      @update
+      @s.update
       def up_rd_A():
         print(s.A[0:17])
 
@@ -172,15 +167,15 @@ def test_multiple_readers():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_8_24():
-        s.A[8:24] @= Bits16( 0x1234 )
+        s.A[8:24] = Bits16( 0x1234 )
 
-      @update
+      @s.update
       def up_rd_0_12():
         assert s.A[0:12] == 0x400
 
-      @update
+      @s.update
       def up_rd_bunch():
         assert s.A[23] == 0
         assert s.A[22] == 0
@@ -256,11 +251,11 @@ def test_rd_As_wr_A_impl():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_A():
-        s.A @= Bits32( 123 )
+        s.A = Bits32( 123 )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 123
 
@@ -273,11 +268,11 @@ def test_rd_As_wr_At_impl_intersect():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_At():
-        s.A[8:24] @= Bits16( 0xff )
+        s.A[8:24] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 0xff00
 
@@ -290,11 +285,11 @@ def test_rd_As_wr_At_impl_disjoint():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_At():
-        s.A[16:32] @= Bits16( 0xff )
+        s.A[16:32] = Bits16( 0xff )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 0
 
@@ -311,13 +306,13 @@ def test_wr_As_wr_A_conflict():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_wr_A():
-        s.A @= Bits32( 123 )
+        s.A = Bits32( 123 )
 
   try:
     _test_model( Top )
@@ -333,15 +328,15 @@ def test_wr_As_wr_At_intersect():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_wr_At():
-        s.A[2:4] @= Bits2( 2 )
+        s.A[2:4] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
@@ -359,15 +354,15 @@ def test_wr_As_wr_At_disjoint():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_wr_At():
-        s.A[5:7] @= Bits2( 2 )
+        s.A[5:7] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
@@ -380,11 +375,11 @@ def test_wr_As_rd_A_impl():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
@@ -397,15 +392,15 @@ def test_wr_As_rd_A_rd_At_can_schedule():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[2:4] == 1
 
@@ -418,15 +413,15 @@ def test_wr_As_rd_A_rd_At_cannot_schedule():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[1:3] @= Bits2( 2 )
+        s.A[1:3] = Bits2( 2 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
-      @update
+      @s.update
       def up_rd_At():
         assert s.A[3:5] == 0
 
@@ -447,15 +442,15 @@ def test_wr_A_rd_slices_can_schedule():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_A():
-        s.A @= 0x12345678
+        s.A = Bits32( 0x12345678 )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 0x5678
 
-      @update
+      @s.update
       def up_rd_At():
         assert s.A[8:24] == 0x3456
 
@@ -468,15 +463,15 @@ def test_wr_As_rd_A_rd_At_bit_cannot_schedule():
     def construct( s ):
       s.A  = Wire( Bits32 )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:16] @= Bits16( 0x1234 )
+        s.A[0:16] = Bits16( 0x1234 )
 
-      @update
+      @s.update
       def up_rd_A():
         z = s.A
 
-      @update
+      @s.update
       def up_rd_At():
         assert s.A[16] == 0
 
@@ -501,11 +496,11 @@ def test_connect_rd_As_wr_x_conn_A_impl():
 
       connect( s.A, s.x )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits32( 123 )
+        s.x = Bits32( 123 )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 123
 
@@ -522,11 +517,11 @@ def test_connect_rd_As_wr_x_conn_At_impl():
 
       connect( s.A[0:24], s.x )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[0:16] == 0x3456
 
@@ -543,11 +538,11 @@ def test_connect_rd_As_wr_x_conn_At_disjoint():
 
       connect( s.A[0:24], s.x )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_rd_As():
         assert s.A[24:32] == 0
 
@@ -572,9 +567,9 @@ def test_connect_wr_As_rd_x_conn_A_mark_writer():
 
       connect( s.x, s.A )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:24] @= Bits24( 0x123456 )
+        s.A[0:24] = Bits24( 0x123456 )
 
   _test_model( Top )
 
@@ -589,13 +584,13 @@ def test_connect_wr_As_wr_x_conn_A_conflict():
 
       connect( s.x, s.A )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:24] @= Bits24( 0x123456 )
+        s.A[0:24] = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits32( 0x87654321 )
+        s.x = Bits32( 0x87654321 )
 
   try:
     _test_model( Top )
@@ -615,9 +610,9 @@ def test_connect_wr_As_rd_x_conn_At_mark_writer():
 
       connect( s.x, s.A[8:32] )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:24] @= Bits24( 0x123456 )
+        s.A[0:24] = Bits24( 0x123456 )
 
   _test_model( Top )
 
@@ -632,9 +627,9 @@ def test_connect_wr_As_rd_x_conn_At_no_driver():
 
       connect( s.x, s.A[8:32] )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:4] @= Bits4( 0xf )
+        s.A[0:4] = Bits4( 0xf )
 
   try:
     _test_model( Top )
@@ -654,13 +649,13 @@ def test_connect_wr_As_wr_x_conn_At_conflict():
 
       connect( s.x, s.A[8:32] )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:24] @= Bits24( 0x123456 )
+        s.A[0:24] = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x654321 )
+        s.x = Bits24( 0x654321 )
 
   try:
     _test_model( Top )
@@ -680,15 +675,15 @@ def test_connect_wr_As_wr_x_conn_At_disjoint():
 
       connect( s.x, s.A[8:32] )
 
-      @update
+      @s.update
       def up_wr_As():
-        s.A[0:4] @= Bits4( 0xf )
+        s.A[0:4] = Bits4( 0xf )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x654321 )
+        s.x = Bits24( 0x654321 )
 
-      @update
+      @s.update
       def up_rd_A():
         assert s.A == 0x6543210f
 
@@ -705,11 +700,11 @@ def test_connect_wr_x_conn_As_rd_A_impl():
 
       connect( s.A[8:32], s.x )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_rd_A():
         assert s.A == 0x12345600
 
@@ -728,13 +723,13 @@ def test_connect_wr_x_conn_As_wr_A_conflict():
       connect( s.A[8:32], s.x )
       connect( s.x, s.y )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_A():
-        s.A @= Bits32( 0x12345678 )
+        s.A = Bits32( 0x12345678 )
 
   try:
     _test_model( Top )
@@ -754,11 +749,11 @@ def test_connect_rd_x_conn_As_wr_A_mark_writer():
 
       connect( s.A[8:32], s.x )
 
-      @update
+      @s.update
       def up_wr_A():
-        s.A @= Bits32( 0x12345678 )
+        s.A = Bits32( 0x12345678 )
 
-      @update
+      @s.update
       def up_rd_x():
         assert s.x == 0x123456
 
@@ -777,13 +772,13 @@ def test_connect_wr_x_conn_As_wr_y_conn_A_conflict():
       connect( s.A[8:32], s.x )
       connect( s.A      , s.y )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits32( 0x12345678 )
+        s.y = Bits32( 0x12345678 )
 
   try:
     _test_model( Top )
@@ -805,13 +800,13 @@ def test_connect_wr_x_conn_As_wr_y_conn_At_conflict():
       connect( s.A[8:32], s.x )
       connect( s.A[0:16], s.y )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits16( 0x1234 )
+        s.y = Bits16( 0x1234 )
 
   try:
     _test_model( Top )
@@ -833,15 +828,15 @@ def test_connect_wr_x_conn_As_wr_y_conn_At_disjoint():
       connect( s.A[8:32], s.x )
       connect( s.A[0:4],  s.y )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits4( 0xf )
+        s.y = Bits4( 0xf )
 
-      @update
+      @s.update
       def up_rd_A():
         assert s.A == 0x1234560f
 
@@ -860,11 +855,11 @@ def test_connect_wr_x_conn_As_rd_y_conn_A_mark_writer():
       connect( s.A[8:32], s.x )
       connect( s.A,       s.y )
 
-      @update
+      @s.update
       def up_wr_x():
-        s.x @= Bits24( 0x123456 )
+        s.x = Bits24( 0x123456 )
 
-      @update
+      @s.update
       def up_rd_y():
         assert s.y == 0x12345600
 
@@ -883,13 +878,13 @@ def test_connect_rd_x_conn_As_wr_y_conn_A_mark_writer():
       connect( s.A[8:32], s.x )
       connect( s.A,       s.y )
 
-      @update
+      @s.update
       def up_rd_x():
         assert s.x == 0x123456
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits32( 0x12345678 )
+        s.y = Bits32( 0x12345678 )
 
   _test_model( Top )
 
@@ -899,20 +894,20 @@ def test_connect_rd_x_conn_As_wr_y_conn_At_mark_writer():
   class Top( ComponentLevel3 ):
     def construct( s ):
 
-      s.x = Wire( Bits24 )
-      s.A = Wire( Bits32 )
-      s.y = Wire( Bits16 )
+      s.x  = Wire( Bits24 )
+      s.A  = Wire( Bits32 )
+      s.y  = Wire( Bits16 )
 
       connect( s.A[8:32], s.x )
       connect( s.A[0:16], s.y )
 
-      @update
+      @s.update
       def up_rd_x():
         assert s.x == 0x12
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits16( 0x1234 )
+        s.y = Bits16( 0x1234 )
 
   _test_model( Top )
 
@@ -929,13 +924,13 @@ def test_connect_rd_x_conn_As_wr_y_conn_no_driver():
       connect( s.A[8:32], s.x )
       connect( s.A[0:4 ], s.y )
 
-      @update
+      @s.update
       def up_rd_x():
         assert s.x == 0
 
-      @update
+      @s.update
       def up_wr_y():
-        s.y @= Bits4( 0xf )
+        s.y = Bits4( 0xf )
 
   try:
     _test_model( Top )
@@ -958,9 +953,9 @@ def test_iterative_find_nets():
       connect( s.x[16:32], s.y[0:16] ) # net2
       connect( s.y[8:24],  s.z[0:16] ) # net3
 
-      @update
+      @s.update
       def up_wr_s_w():
-        s.w @= Bits32( 0x12345678 )
+        s.w = Bits32( 0x12345678 )
 
   _test_model( Top )
 
@@ -980,9 +975,9 @@ def test_multiple_sibling_slices():
 
       connect( s.A[16:32], s.z ) # net3
 
-      @update
+      @s.update
       def up_wr_s_w():
-        s.x @= Bits16( 0x1234 )
+        s.x = Bits16( 0x1234 )
 
   try:
     _test_model( Top )
@@ -999,10 +994,10 @@ def test_multiple_write_same_slice():
       s.wire = Wire( Bits32 )
       connect( s.out, s.wire[0:32] )
 
-      @update
+      @s.update
       def comb_upblk():
-        s.wire[0:16]  @= 0
-        s.wire[16:32] @= 1
+        s.wire[0:16]  = 0
+        s.wire[16:32] = 1
 
   a = A()
   a.elaborate()
@@ -1018,10 +1013,10 @@ def test_multiple_write_same_slice_with_overlap():
       s.wire2 = Wire( Bits24 )
       connect( s.wire2[0:24], s.wire[8:32] )
 
-      @update
+      @s.update
       def comb_upblk():
-        s.wire[0:16]  @= 0
-        s.wire2[0:24] @= 1
+        s.wire[0:16]  = 0
+        s.wire2[0:24] = 1
 
   try:
     _test_model( A )

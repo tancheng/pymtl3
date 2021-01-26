@@ -12,8 +12,8 @@ from collections import deque
 from hashlib import blake2b
 
 from pymtl3.passes.rtlir import RTLIRDataType as rdt
-from pymtl3.passes.rtlir import RTLIRGetter
 from pymtl3.passes.rtlir import RTLIRType as rt
+from pymtl3.passes.rtlir import get_component_ifc_rtlir
 from pymtl3.passes.rtlir.util.utility import get_component_full_name
 
 
@@ -25,9 +25,8 @@ def make_indent( src, nindent ):
 
 def get_component_unique_name( c_rtype ):
   full_name = get_component_full_name( c_rtype )
-  special_chars = [' ', '<', '>', '.']
 
-  if len( full_name ) < 64 and not any([c in full_name for c in special_chars]):
+  if len( full_name ) < 64:
     return full_name
 
   comp_name = c_rtype.get_name()
@@ -35,6 +34,11 @@ def get_component_unique_name( c_rtype ):
   param_hash.update(full_name[len(comp_name):].encode('ascii'))
   param_name = param_hash.hexdigest()
   return comp_name + "__" + param_name
+
+  def get_string( obj ):
+    """Return the string that identifies `obj`"""
+    if isinstance(obj, type): return obj.__name__
+    return str( obj )
 
 def wrap( s ):
   col = shutil.get_terminal_size().columns
@@ -44,12 +48,7 @@ def expand( v ):
   return os.path.expanduser(os.path.expandvars(v))
 
 def pretty_concat( *strings ):
-  ret = ' '.join([s for s in strings[:-1] if s])
-  if strings[-1] == ';':
-    ret += ';'
-  else:
-    ret += f' {strings[-1]}'
-  return ret
+  return ' '.join([s for s in strings if s])
 
 def get_dir( cur_file ):
   return os.path.dirname(os.path.abspath(cur_file))+os.path.sep
@@ -60,27 +59,6 @@ def get_file_hash( file_path ):
     string = ''.join( fd.readlines() ).encode( 'ascii' )
     hash_inst.update(string)
     return hash_inst.hexdigest()
-
-def get_lean_verilog_file( file_path ):
-  with open(file_path) as fd:
-    file_v = [x for x in fd.readlines() if x != '\n' and not x.startswith('//')]
-  return file_v
-
-def get_hash_of_lean_verilog( file_path ):
-  hash_inst = blake2b()
-  v = get_lean_verilog_file( file_path )
-  string = ''.join(v).encode( 'ascii' )
-  hash_inst.update(string)
-  return hash_inst.hexdigest()
-
-def verilog_cmp( tmp, out ):
-  tmp_v, out_v = get_lean_verilog_file(tmp), get_lean_verilog_file(out)
-  is_same_len = len(tmp_v) == len(out_v)
-  if is_same_len:
-    for i in range(len(out_v)):
-      if out_v[i] != tmp_v[i]:
-        return False
-  return is_same_len
 
 verilog_keyword = [
   # Verilog-1995 reserved keywords
@@ -143,7 +121,7 @@ def get_rtype( _rtype ):
 # gen_mapped_ports
 #-----------------------------------------------------------------------
 
-def gen_mapped_ports( m, raw_port_map, has_clk=True, has_reset=True, sep='__' ):
+def gen_mapped_ports( m, port_map, has_clk=True, has_reset=True ):
   """Return a list of (pname, vname, rt.Port/rt.Array ) that has all ports
   of `rtype`. This method performs SystemVerilog backend-specific name
   mangling and returns all ports that appear in the interface of component
@@ -156,21 +134,11 @@ def gen_mapped_ports( m, raw_port_map, has_clk=True, has_reset=True, sep='__' ):
      element is mapped in port_map, or _all_ of the elements are mapped.
   """
 
-  # Shunning: this handles the case where the port is in interface since
-  # we need to actually extract 'minion.req.en' from 's.x.y.minion.req.en'
-  port_map = {}
-  l = len(repr(m))
-  for p, mapped_name in raw_port_map.items():
-    assert p.get_host_component() is m
-    port_map[ repr(p)[l+1:] ] = mapped_name
-
-  # [pnames], vname, rtype, port_idx
-
   def _mangle_port( pname, vname, port, n_dim ):
 
     # Normal port
     if not n_dim:
-      return [ ( [pname], port_map[pname] if pname in port_map else vname, port, 0 ) ]
+      return [ ( [pname], port_map[pname] if pname in port_map else vname, port ) ]
 
     # Handle port array. We just assume if one element of the port array
     # is mapped, we need the user to map every element in the array.
@@ -183,44 +151,44 @@ def gen_mapped_ports( m, raw_port_map, has_clk=True, has_reset=True, sep='__' ):
         if _pname in port_map:
           found += 1
           _vname = port_map[_pname]
-        all_ports.append( ( [_pname], _vname, _port, 0 ) )
+        all_ports.append( ( [_pname], _vname, _port ) )
       else:
         for i in range( _n_dim[0] ):
-          Q.append( (f"{_pname}[{i}]", f"{_vname}{sep}{i}", _port, _n_dim[1:]) )
+          Q.append( (f"{_pname}[{i}]", f"{_vname}__{i}", _port, _n_dim[1:]) )
 
     assert found == len(all_ports) or found == 0, \
         f"{pname} is an {len(n_dim)}-D array of ports with {len(all_ports)} ports in total, " \
         f" but only {found} of them is mapped. Please either map all of them or none of them."
 
     if not found:
-      return [ ( [pname], vname, rt.Array( n_dim, port ), 0 ) ]
+      return [ ( [pname], vname, rt.Array( n_dim, port ) ) ]
     else:
       return all_ports
 
   def _is_ifc_mapped( pname, vname, rtype, n_dim ):
     found, tot, flatten_ports = 0, 0, []
     # pname, vname, rtype, n_dim
-    Q = deque( [ (pname, vname, rtype, n_dim, 0) ] )
+    Q = deque( [ (pname, vname, rtype, n_dim) ] )
 
     while Q:
-      _pname, _vname, _rtype, _n_dim, _prev_dims = Q.popleft()
+      _pname, _vname, _rtype, _n_dim = Q.popleft()
       if _n_dim:
         for i in range(_n_dim[0]):
-          Q.append((f"{_pname}[{i}]", f"{_vname}{sep}{i}", _rtype, _n_dim[1:], _prev_dims+1))
+          Q.append((f"{_pname}[{i}]", f"{_vname}__{i}", _rtype, _n_dim[1:]))
       else:
         if isinstance( _rtype, rt.Port ):
           # Port inside the interface
           tot += 1
           if _pname in port_map:
             found += 1
-            flatten_ports.append(([_pname], port_map[_pname], _rtype, _prev_dims))
+            flatten_ports.append(([_pname], port_map[_pname], _rtype))
           else:
-            flatten_ports.append(([_pname], _vname, _rtype, _prev_dims))
+            flatten_ports.append(([_pname], _vname, _rtype))
         elif isinstance( _rtype, rt.InterfaceView ):
           # Interface (nested)
           for sub_name, sub_rtype in _rtype.get_all_properties_packed():
             sub_n_dim, sub_rtype = get_rtype( sub_rtype )
-            Q.append((f"{_pname}.{sub_name}", f"{_vname}{sep}{sub_name}", sub_rtype, sub_n_dim, _prev_dims))
+            Q.append((f"{_pname}.{sub_name}", f"{_vname}__{sub_name}", sub_rtype, sub_n_dim))
         else:
           assert False, f"{_pname} is not interface(s) or port(s)!"
 
@@ -231,41 +199,40 @@ def gen_mapped_ports( m, raw_port_map, has_clk=True, has_reset=True, sep='__' ):
 
   def _gen_packed_ifc( pname, vname, ifc, n_dim ):
     packed_ifc, ret = [], []
-    Q = deque( [ (pname, vname, ifc, n_dim, [], 0) ] )
+    Q = deque( [ (pname, vname, ifc, n_dim, []) ] )
     while Q:
-      _pname, _vname, _rtype, _n_dim, _prev_n_dim, _port_idx = Q.popleft()
+      _pname, _vname, _rtype, _n_dim, _prev_n_dim = Q.popleft()
 
       if isinstance( _rtype, rt.Port ):
         if not (_prev_n_dim + _n_dim):
           new_rtype = _rtype
         else:
           new_rtype = rt.Array(_prev_n_dim+_n_dim, _rtype)
-        packed_ifc.append((_pname, _vname, new_rtype, _port_idx))
+        packed_ifc.append((_pname, _vname, new_rtype))
 
       elif isinstance( _rtype, rt.InterfaceView ):
         if _n_dim:
           new_prev_n_dim = _prev_n_dim + [_n_dim[0]]
           for i in range(_n_dim[0]):
-            Q.append((f"{_pname}[{i}]", _vname, _rtype, _n_dim[1:], new_prev_n_dim, _port_idx+1))
+            Q.append((f"{_pname}[{i}]", _vname, _rtype, _n_dim[1:], new_prev_n_dim))
         else:
           new_prev_n_dim = _prev_n_dim
           for sub_name, sub_rtype in _rtype.get_all_properties_packed():
             sub_n_dim, sub_rtype = get_rtype( sub_rtype )
-            Q.append((f"{_pname}.{sub_name}", f"{_vname}{sep}{sub_name}",
-                      sub_rtype, sub_n_dim, new_prev_n_dim, _port_idx))
+            Q.append((f"{_pname}.{sub_name}", f"{_vname}__{sub_name}",
+                      sub_rtype, sub_n_dim, new_prev_n_dim))
       else:
         assert False, f"{_pname} is not interface(s) or port(s)!"
 
     # Merge entries whose vnames are the same. The result will have a list for
     # the pnames.
     names = set()
-    for _, vname, rtype, port_idx in packed_ifc:
+    for _, vname, rtype in packed_ifc:
       if vname not in names:
         names.add( vname )
-        ret.append(([], vname, rtype, port_idx))
-        for _pname, _vname, _, _port_idx in packed_ifc:
+        ret.append(([], vname, rtype))
+        for _pname, _vname, _ in packed_ifc:
           if vname == _vname:
-            assert _port_idx == port_idx
             ret[-1][0].append(_pname)
 
     return ret
@@ -279,7 +246,7 @@ def gen_mapped_ports( m, raw_port_map, has_clk=True, has_reset=True, sep='__' ):
 
   # We start from all packed ports/interfaces, and unpack arrays if
   # it is found in a port.
-  rtype = RTLIRGetter(cache=False).get_component_ifc_rtlir(m)
+  rtype = get_component_ifc_rtlir(m)
   ret = []
 
   for name, port in rtype.get_ports_packed():

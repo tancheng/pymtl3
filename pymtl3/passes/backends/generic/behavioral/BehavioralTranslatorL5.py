@@ -28,17 +28,16 @@ class BehavioralTranslatorL5( BehavioralTranslatorL4 ):
 
   # Override
   def _gen_behavioral_trans_metadata( s, m ):
-    m.apply( BehavioralRTLIRGenL5Pass( s.tr_top ) )
-    m.apply( BehavioralRTLIRTypeCheckL5Pass( s.tr_top ) )
-    s.behavioral.rtlir[m] = \
-        m.get_metadata( BehavioralRTLIRGenL5Pass.rtlir_upblks )
+    m.apply( BehavioralRTLIRGenL5Pass() )
+    m.apply( BehavioralRTLIRTypeCheckL5Pass() )
+    s.behavioral.rtlir[m] = m._pass_behavioral_rtlir_gen.rtlir_upblks
     s.behavioral.freevars[m] =\
-        m.get_metadata( BehavioralRTLIRTypeCheckL5Pass.rtlir_freevars )
+        m._pass_behavioral_rtlir_type_check.rtlir_freevars
     s.behavioral.tmpvars[m] =\
-        m.get_metadata( BehavioralRTLIRTypeCheckL5Pass.rtlir_tmpvars )
+        m._pass_behavioral_rtlir_type_check.rtlir_tmpvars
 
     # Visit the whole component hierarchy because now we have subcomponents
-    for child in m.get_child_components(repr):
+    for child in m.get_child_components():
       s._gen_behavioral_trans_metadata( child )
 
   #-----------------------------------------------------------------------
@@ -48,5 +47,5 @@ class BehavioralTranslatorL5( BehavioralTranslatorL4 ):
   # Override
   def translate_behavioral( s, m ):
     super().translate_behavioral( m )
-    for child in m.get_child_components(repr):
+    for child in m.get_child_components():
       s.translate_behavioral( child )

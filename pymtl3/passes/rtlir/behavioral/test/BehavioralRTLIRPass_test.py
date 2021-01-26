@@ -41,14 +41,13 @@ def local_do_test( m ):
 
   ref = m._rtlir_test_ref
   m.elaborate()
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
   m.apply( BehavioralRTLIRVisualizationPass() )
 
-  rtlir_upblks = m.get_metadata( BehavioralRTLIRGenPass.rtlir_upblks )
-
   for blk in m.get_update_blocks():
-    assert rtlir_upblks[ blk ] == ref[ blk.__name__ ]
+    assert\
+      m._pass_behavioral_rtlir_gen.rtlir_upblks[ blk ] == ref[ blk.__name__ ]
 
 def test_reduce( do_test ):
   a = CaseReducesInx3OutComp.DUT()
@@ -129,7 +128,7 @@ def test_index_bits_slicing( do_test ):
           Slice( Index( Attribute( Base( a ), 'in_' ), Number( 2 ) ), Number( 0 ), Number( 8 ) ),
         ),
         Add(),
-        Number( 10 )
+        SizeCast( 8, Number( 10 ) )
       ),
       True
     ),
@@ -142,7 +141,7 @@ def test_index_bits_slicing( do_test ):
           Index( Attribute( Base( a ), 'in_' ), Number( 4 ) )
         ),
         Add(),
-        Number( 1 )
+        SizeCast( 16, Number( 1 ) )
       ),
       True
     ),
@@ -171,9 +170,9 @@ def test_if_basic( do_test ):
 
   a._rtlir_test_ref = {
     'if_basic' : CombUpblk( 'if_basic', [ If(
-      Compare( Slice( Attribute( Base( a ), 'in_' ), Number( 0 ), Number( 8 ) ), Eq(), Number( 255 ) ),
+      Compare( Slice( Attribute( Base( a ), 'in_' ), Number( 0 ), Number( 8 ) ), Eq(), SizeCast( 8, Number( 255 ) ) ),
       [ Assign( [Attribute( Base( a ), 'out' )], Slice( Attribute( Base( a ), 'in_' ), Number( 8 ), Number( 16 ) ), True ) ],
-      [ Assign( [Attribute( Base( a ), 'out' )], Number( 0 ), True ) ]
+      [ Assign( [Attribute( Base( a ), 'out' )], SizeCast( 8, Number( 0 ) ), True ) ]
     )
   ] ) }
 

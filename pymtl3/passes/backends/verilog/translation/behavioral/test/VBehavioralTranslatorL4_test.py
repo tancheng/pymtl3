@@ -22,11 +22,11 @@ from ..VBehavioralTranslatorL4 import BehavioralRTLIRToVVisitorL4
 
 def run_test( case, m ):
   m.elaborate()
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
 
   visitor = BehavioralRTLIRToVVisitorL4(lambda x: x in verilog_reserved)
-  upblks = m.get_metadata( BehavioralRTLIRGenPass.rtlir_upblks )
+  upblks = m._pass_behavioral_rtlir_gen.rtlir_upblks
   m_all_upblks = m.get_update_blocks()
   assert len(m_all_upblks) == 1
 

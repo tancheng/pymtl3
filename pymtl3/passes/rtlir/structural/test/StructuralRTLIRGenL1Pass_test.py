@@ -4,9 +4,10 @@
 # Author : Peitian Pan
 # Date   : May 19, 2019
 """Test the generation of level 1 structural RTLIR."""
+
 from collections import defaultdict, deque
 
-from pymtl3 import dsl
+import pymtl3.dsl as dsl
 from pymtl3.datatypes import Bits1, Bits4, Bits32
 from pymtl3.passes.rtlir.rtype import RTLIRDataType as rdt
 from pymtl3.passes.rtlir.rtype import RTLIRType as rt
@@ -72,16 +73,16 @@ def test_L1_const_numbers():
   a = CaseConstBits32AttrComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  consts = a.get_metadata( StructuralRTLIRGenL1Pass.consts )
-  assert consts == [('const', rt.Array([5], rt.Const(rdt.Vector(32))), a.const)]
+  ns = a._pass_structural_rtlir_gen
+  assert ns.consts == [('const', rt.Array([5], rt.Const(rdt.Vector(32))), a.const)]
 
 def test_L1_connection_order():
   a = CaseInx2Outx2ConnectComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
-  assert connections == \
+  assert ns.connections == \
     [(sexp.CurCompAttr(comp, 'in_1'), sexp.CurCompAttr(comp, 'out1')),
      (sexp.CurCompAttr(comp, 'in_2'), sexp.CurCompAttr(comp, 'out2'))]
 
@@ -89,55 +90,55 @@ def test_L1_port_index():
   a = CaseConnectPortIndexComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
-  assert connections == \
+  assert ns.connections == \
     [(sexp.PortIndex(sexp.CurCompAttr(comp, 'in_'), 2), sexp.CurCompAttr(comp, 'out'))]
 
 def test_L1_wire_index():
   a = CaseConnectInToWireComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
-  assert connections[0] == \
+  assert ns.connections[0] == \
     (sexp.WireIndex(sexp.CurCompAttr(comp, 'wire_'), 2), sexp.CurCompAttr(comp, 'out'))
 
 def test_L1_const_index():
   a = CaseConnectConstToOutComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
   # The expression structure is removed and only the constant value
   # is left in this node.
-  assert connections == \
-    [(sexp.ConstInstance(Bits32(a.const_[2]), 42), sexp.CurCompAttr(comp, 'out'))]
+  assert ns.connections == \
+    [(sexp.ConstInstance(a.const_[2], 42), sexp.CurCompAttr(comp, 'out'))]
 
 def test_L1_bit_selection():
   a = CaseConnectBitSelToOutComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
   # PyMTL DSL converts bit selection into 1-bit part selection!
-  assert connections == \
+  assert ns.connections == \
     [(sexp.PartSelection(sexp.CurCompAttr(comp, 'in_'), 0, 1), sexp.CurCompAttr(comp, 'out'))]
 
 def test_L1_part_selection():
   a = CaseConnectSliceToOutComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
-  assert connections == \
+  assert ns.connections == \
     [(sexp.PartSelection(sexp.CurCompAttr(comp, 'in_'), 4, 8), sexp.CurCompAttr(comp, 'out'))]
 
 def test_L1_bits_connection():
   a = CaseConnectBitsConstToOutComp.DUT()
   a.elaborate()
   a.apply( StructuralRTLIRGenL1Pass( gen_connections( a ) ) )
-  connections = a.get_metadata( StructuralRTLIRGenL1Pass.connections )
+  ns = a._pass_structural_rtlir_gen
   comp = sexp.CurComp(a, 's')
-  assert connections == \
+  assert ns.connections == \
     [(sexp.ConstInstance(Bits32(0), 0), sexp.CurCompAttr(comp, 'out'))]

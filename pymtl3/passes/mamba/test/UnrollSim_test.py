@@ -11,15 +11,15 @@ def test_very_deep_dag():
       s.in_ = InPort(Bits32)
       s.out = OutPort(Bits32)
 
-      @update
+      @s.update
       def up():
-        s.out @= s.in_ + 1
+        s.out = s.in_ + 1
 
     def done( s ):
       return True
 
     def line_trace( s ):
-      return "{} > {}".format( s.a, s.b )
+      return "{} > {}".format( s.a, s.b, s.c, s.d )
 
   class Top(Component):
     def construct( s, N=2000 ):
@@ -28,7 +28,7 @@ def test_very_deep_dag():
         s.inners[i].out //= s.inners[i+1].in_
 
       s.out = OutPort(Bits32)
-      @update_ff
+      @s.update_ff
       def ff():
         if s.reset:
           s.out <<= 0
@@ -42,30 +42,11 @@ def test_very_deep_dag():
   A = Top( N )
 
   A.apply( UnrollSim() )
-  A.sim_reset()
 
   T = 0
   while T < 5:
+    A.tick()
+    print(A.line_trace())
     assert A.out == T * N
-    A.sim_tick()
     T += 1
   return A
-
-def test_equal_top_level():
-  class A(Component):
-    def construct( s ):
-      @update
-      def up():
-        print(1)
-
-  a = A()
-  a.apply( UnrollSim() )
-  a.sim_reset()
-
-  try:
-    a.reset = 0
-    a.sim_tick()
-  except AssertionError as e:
-    print(e)
-    assert str(e).startswith("Please use @= to assign top level InPort")
-    return

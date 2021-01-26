@@ -12,27 +12,21 @@ from pymtl3.passes.rtlir import BehavioralRTLIRGenPass, BehavioralRTLIRTypeCheck
 
 from ....testcases import (
     CaseBits32FooInBits32OutComp,
-    CaseBits32FooNoArgBehavioralComp,
-    CaseBits32FooToBits32Comp,
-    CaseBits32ToBits32FooComp,
     CaseConstStructInstComp,
-    CaseIntToBits32FooComp,
     CaseNestedStructPackedArrayUpblkComp,
     CaseSizeCastPaddingStructPort,
     CaseStructPackedArrayUpblkComp,
-    CaseStructUnique,
-    CaseTypeBundle,
 )
 from ..VBehavioralTranslatorL3 import BehavioralRTLIRToVVisitorL3
 
 
 def run_test( case, m ):
   m.elaborate()
-  m.apply( BehavioralRTLIRGenPass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckPass( m ) )
+  m.apply( BehavioralRTLIRGenPass() )
+  m.apply( BehavioralRTLIRTypeCheckPass() )
 
   visitor = BehavioralRTLIRToVVisitorL3(lambda x: x in verilog_reserved)
-  upblks = m.get_metadata( BehavioralRTLIRGenPass.rtlir_upblks )
+  upblks = m._pass_behavioral_rtlir_gen.rtlir_upblks
   m_all_upblks = m.get_update_blocks()
   assert len(m_all_upblks) == 1
 
@@ -48,12 +42,6 @@ def run_test( case, m ):
       CaseStructPackedArrayUpblkComp,
       CaseNestedStructPackedArrayUpblkComp,
       CaseSizeCastPaddingStructPort,
-      CaseTypeBundle,
-      CaseBits32FooToBits32Comp,
-      CaseBits32ToBits32FooComp,
-      CaseIntToBits32FooComp,
-      CaseBits32FooNoArgBehavioralComp,
-    CaseStructUnique,
     ]
 )
 def test_verilog_behavioral_L3( case ):

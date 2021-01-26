@@ -24,7 +24,6 @@ from pymtl3.passes.rtlir.util.test_utility import do_test, expected_failure
 from pymtl3.passes.testcases import (
     CaseAssignMultiTargetComp,
     CaseAttributeSignalComp,
-    CaseBits64TruncInComp,
     CaseBitsArgsComp,
     CaseBitSelOutOfRangeComp,
     CaseClassdefComp,
@@ -81,8 +80,6 @@ from pymtl3.passes.testcases import (
     CaseStrComp,
     CaseStructBitsUnagreeableComp,
     CaseTmpComponentComp,
-    CaseTruncLargeNbitsComp,
-    CaseTruncVaribleNbitsComp,
     CaseTryExceptComp,
     CaseTryFinallyComp,
     CaseTupleComp,
@@ -112,19 +109,16 @@ def local_do_test( m ):
   """Check if generated behavioral RTLIR is the same as reference."""
   m = m.DUT()
   m.elaborate()
-  m.apply( BehavioralRTLIRGenL1Pass( m ) )
-  m.apply( BehavioralRTLIRTypeCheckL1Pass( m ) )
+  m.apply( BehavioralRTLIRGenL1Pass() )
+  m.apply( BehavioralRTLIRTypeCheckL1Pass() )
 
   try:
     ref = m._rtlir_test_ref
     for blk in m.get_update_blocks():
-      upblk = m.get_metadata( BehavioralRTLIRGenL1Pass.rtlir_upblks )[ blk ]
+      upblk = m._pass_behavioral_rtlir_gen.rtlir_upblks[ blk ]
       assert upblk == ref[ blk.__name__ ]
   except AttributeError:
     pass
-
-def test_L1_call_name( do_test ):
-  do_test( CaseNonNameCalledComp )
 
 #-------------------------------------------------------------------------
 # PyMTL type errors
@@ -139,28 +133,20 @@ def test_L1_concat_component( do_test ):
     do_test( CaseConcatComponentComp )
 
 def test_L1_zext_variable_nbits( do_test ):
-  with expected_failure( PyMTLSyntaxError, "not a constant int or BitsN type" ):
+  with expected_failure( PyMTLTypeError, "not a constant number" ):
     do_test( CaseZextVaribleNbitsComp )
 
 def test_L1_zext_small_nbits( do_test ):
-  with expected_failure( PyMTLTypeError, "less than the bitwidth of the operand" ):
+  with expected_failure( PyMTLTypeError, "not greater" ):
     do_test( CaseZextSmallNbitsComp )
 
 def test_L1_sext_variable_nbits( do_test ):
-  with expected_failure( PyMTLSyntaxError, "not a constant int or BitsN type" ):
+  with expected_failure( PyMTLTypeError, "not a constant number" ):
     do_test( CaseSextVaribleNbitsComp )
 
 def test_L1_sext_small_nbits( do_test ):
-  with expected_failure( PyMTLTypeError, "less than the bitwidth of the operand" ):
+  with expected_failure( PyMTLTypeError, "not greater" ):
     do_test( CaseSextSmallNbitsComp )
-
-def test_L1_trunc_variable_nbits( do_test ):
-  with expected_failure( PyMTLSyntaxError, "not a constant int or BitsN type" ):
-    do_test( CaseTruncVaribleNbitsComp )
-
-def test_L1_trunc_large_nbits( do_test ):
-  with expected_failure( PyMTLTypeError, "larger than the bitwidth of the operand" ):
-    do_test( CaseTruncLargeNbitsComp )
 
 def test_L1_wrong_attribute( do_test ):
   with expected_failure( PyMTLTypeError, "does not have attribute in_" ):
@@ -313,12 +299,16 @@ def test_L1_call_keyword_arg( do_test ):
   with expected_failure( PyMTLSyntaxError, "keyword argument" ):
     do_test( CaseKwArgsComp )
 
+def test_L1_call_name( do_test ):
+  with expected_failure( PyMTLSyntaxError, "called but is not a name" ):
+    do_test( CaseNonNameCalledComp )
+
 def test_L1_call_not_found( do_test ):
   with expected_failure( PyMTLSyntaxError, "function is not found" ):
     do_test( CaseFuncNotFoundComp )
 
 def test_L1_call_Bits_args( do_test ):
-  with expected_failure( PyMTLSyntaxError, "exactly one or zero argument" ):
+  with expected_failure( PyMTLSyntaxError, "exactly one argument" ):
     do_test( CaseBitsArgsComp )
 
 def test_L1_call_concat_args( do_test ):
@@ -334,7 +324,7 @@ def test_L1_call_sext_num_args( do_test ):
     do_test( CaseSextTwoArgsComp )
 
 def test_L1_call_unrecognized( do_test ):
-  with expected_failure( PyMTLSyntaxError, "function is not found" ):
+  with expected_failure( PyMTLSyntaxError, "Unrecognized method" ):
     do_test( CaseUnrecognizedFuncComp )
 
 #-------------------------------------------------------------------------

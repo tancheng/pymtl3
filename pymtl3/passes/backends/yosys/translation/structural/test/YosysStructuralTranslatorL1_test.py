@@ -11,15 +11,11 @@ from pymtl3.passes.backends.verilog.util.test_utility import check_eq
 from pymtl3.passes.backends.verilog.util.utility import verilog_reserved
 
 from ....testcases import (
-    CaseBitSelOverBitSelComp,
-    CaseBitSelOverPartSelComp,
     CaseConnectBitsConstToOutComp,
     CaseConnectBitSelToOutComp,
     CaseConnectConstToOutComp,
     CaseConnectInToWireComp,
     CaseConnectSliceToOutComp,
-    CasePartSelOverBitSelComp,
-    CasePartSelOverPartSelComp,
 )
 from ..YosysStructuralTranslatorL1 import YosysStructuralTranslatorL1
 
@@ -48,10 +44,6 @@ def run_test( case, m ):
     CaseConnectConstToOutComp,
     CaseConnectBitSelToOutComp,
     CaseConnectSliceToOutComp,
-    CaseBitSelOverBitSelComp,
-    CaseBitSelOverPartSelComp,
-    CasePartSelOverBitSelComp,
-    CasePartSelOverPartSelComp,
   ]
 )
 def test_yosys_structural_L1( case ):
