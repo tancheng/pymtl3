@@ -1,0 +1,2 @@
+# This file specifies the dependencies needed for developing PyMTL
+-r requirements/dev.txt

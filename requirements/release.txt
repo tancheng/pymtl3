@@ -1,0 +1,5 @@
+# Minimal dependencies required for using pip-installed PyMTL
+pytest
+hypothesis
+cffi
+greenlet
